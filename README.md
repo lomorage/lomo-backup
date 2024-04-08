@@ -10,12 +10,13 @@ As I have local duplicate backup as well, and most time I access photos and vide
 # Cost Analysis
 Let us calculate the cost using AWS Glancier. As of 2024/4/4
 
-- $0.023 per GB (First 50 TB / Month)- $0.005 (PUT, COPY, POST, LIST requests (per 1,000 requests))
-- $0.0004 (GET, SELECT, and all other requests (per 1,000 requests))
+- $0.0036 per GB / Month
+- $0.03 (PUT, COPY, POST, LIST requests (per 1,000 requests))
+- $0.0004 (GET, SELECT, and all other requests (per 1,000 requests)) (need recalculate)
 
-assuming I have 50,000 photos (2M each) + 5,000 videos (30M each)， total storage is 250G, and total price will be 250 * 0.023 = $5.75 / month, and all PUT API costs will be 55000 * 0.005 = $275. consistency check will mainly use GET and LIST API, price will be 55000 * 0.0004 = $22 / month
+assuming I have 50,000 photos (2M each) + 5,000 videos (30M each)， total storage is 250G, and total price will be 250 * 0.0036 = $0.9 / month, and total upload costs will be 55000 * 0.03 = $16.5. (need recalculate: consistency check will mainly use GET and LIST API, price will be 55000 * 0.0004 = $22 / month)
 
-assuming I have 250 new photos (2M each) + 50 videos (30M each) per month, total new storage is 2G, total price will be 2 * 0.023 = $0.046, and all PUT API cost will be 300 * 0.005 = $1.5. consistency check will be 300 * 0.0004 = $0.12.
+assuming I have 250 new photos (2M each) + 50 videos (30M each) per month, total new storage is 2G, total price will be 2 * 0.0036 = $0.0072, and all PUT API cost will be 300 * 0.03 = $9. (need recalculate: consistency check will be 300 * 0.0004 = $0.12).
 
 # 2 Stages Approach
 There are too many small files, thus API operation becomes main cost comparing with real storage cost. So how about I pack all images and videos into one big ISO, just like I burnt one CD rom to backup content at old days. 
@@ -24,7 +25,7 @@ But ISO approach has one limitation is to append into new files, you need have o
 
 Since many cloud provider offers free storage tier option, we can use them as middle man or staging station before getting ready to make ISO and back up to Glancier. So called 2 stages approach can meet this need. - use free storage to store metadata and short term backup- use GDA to store permanent files.
 
-For example, Google drive offers 15G free space, AWS offers 15G free storage, MS one drive offers 5G free space. If we use 10G to make one ISO, new cost for storage will be same, but all PUT API costs will be 250/10 * 0.005 = $0.125. Consistency check price will be 250/10 * 0.0004 = $0.01
+For example, Google drive offers 15G free space, AWS offers 15G free storage, MS one drive offers 5G free space. If we use 10G to make one ISO, new cost for storage will be same, but all upload costs will be 250/10 * 0.03 = $0.75. Consistency check price will be 250/10 * 0.0004 = $0.01
 
 Now we'll do one upload every 5 months. Only 1 API operation is needed, and cost can be ignore.
 
