@@ -10,10 +10,10 @@ type DirInfo struct {
 
 // FileInfo is structure for file
 type FileInfo struct {
-	IsoID      int
-	Name       string
-	Dir        *DirInfo
-	Ext        string
-	Size       int
-	ModifyTime time.Time
+	DirID   int
+	IsoID   int
+	Name    string
+	Hash    string
+	Size    int
+	ModTime time.Time
 }
