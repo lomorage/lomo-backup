@@ -31,7 +31,7 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "log-level, l",
-			Usage: "log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel",
+			Usage: "Log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel",
 			Value: int(logrus.InfoLevel),
 		},
 	}
@@ -39,34 +39,34 @@ func main() {
 		{
 			Name:      "scan",
 			Action:    scanDir,
-			Usage:     "scan all files under given directory",
+			Usage:     "Scan all files under given directory",
 			ArgsUsage: scanUsage,
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "ignore-files, if",
-					Usage: "list of ignored files, seperated by comman",
+					Usage: "List of ignored files, seperated by comman",
 					Value: ".DS_Store,._.DS_Store,Thumbs.db",
 				},
 				cli.StringFlag{
 					Name:  "ignore-dirs, in",
-					Usage: "list of ignored directories, seperated by comman",
-					Value: ".idea,.git",
+					Usage: "List of ignored directories, seperated by comman",
+					Value: ".idea,.git,.github",
 				},
 				cli.IntFlag{
 					Name:  "threads, t",
-					Usage: "number of scan threads in parallel",
+					Usage: "Number of scan threads in parallel",
 					Value: 20,
 				},
 			},
 		},
 		{
 			Name:  "iso",
-			Usage: "iso related commands",
+			Usage: "ISO related commands",
 			Subcommands: cli.Commands{
 				{
 					Name:      "create",
 					Action:    mkISO,
-					Usage:     "group pictures and make iso",
+					Usage:     "Group scanned files and make iso",
 					ArgsUsage: mkisoUsage,
 					Flags: []cli.Flag{
 						cli.StringFlag{
@@ -79,7 +79,31 @@ func main() {
 				{
 					Name:   "list",
 					Action: listISO,
-					Usage:  "list all files created files",
+					Usage:  "List all files created files",
+				},
+			},
+		},
+		{
+			Name:  "list",
+			Usage: "List scanned files related commands",
+			Subcommands: cli.Commands{
+				{
+					Name:      "bigfiles",
+					Action:    listBigfiles,
+					Usage:     "List big files",
+					ArgsUsage: mkisoUsage,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "file-size,s",
+							Usage: "Minimum file size in the list result",
+							Value: "50MB",
+						},
+					},
+				},
+				{
+					Name:   "dirs",
+					Action: listScanedDirs,
+					Usage:  "List all scanned directories",
 				},
 			},
 		},

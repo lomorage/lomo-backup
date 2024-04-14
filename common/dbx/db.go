@@ -24,6 +24,8 @@ const (
 
 	listFilesNotInIsoStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
+	listFilesBySizeStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
+		" inner join dirs as d on f.dir_id=d.id where f.size >= ? order by f.size DESC"
 	insertFileStmt = "insert into files (dir_id, name, ext, size, hash, mod_time, create_time)" +
 		" values (?, ?, ?, ?, ?, ?, ?)"
 	getFileByNameAndDirStmt      = "select iso_id, size, hash, mod_time from files where name=? and dir_id=?"
@@ -213,6 +215,32 @@ func (db *DB) ListFilesNotInISO() ([]*types.FileInfo, error) {
 	err := db.retryIfLocked("list files not in ISO",
 		func(tx *sql.Tx) error {
 			rows, err := tx.Query(listFilesNotInIsoStmt)
+			if err != nil {
+				return nil
+			}
+			for rows.Next() {
+				var path, name string
+				f := &types.FileInfo{}
+				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size)
+				if err != nil {
+					return err
+				}
+				f.Name = filepath.Join(path, name)
+
+				files = append(files, f)
+			}
+			return rows.Err()
+		},
+	)
+	return files, err
+}
+
+func (db *DB) ListFilesBySize(minFileSize int) ([]*types.FileInfo, error) {
+	files := []*types.FileInfo{}
+
+	err := db.retryIfLocked("list files by size",
+		func(tx *sql.Tx) error {
+			rows, err := tx.Query(listFilesBySizeStmt, minFileSize)
 			if err != nil {
 				return nil
 			}
