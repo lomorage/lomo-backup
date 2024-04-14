@@ -3,13 +3,15 @@ CREATE TABLE IF NOT EXISTS isos (
   name VARCHAR NOT NULL UNIQUE,
   location VARCHAR,
   bucket VARCHAR,
-  size INTEGER
+  size INTEGER,
+  create_time TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS dirs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path VARCHAR NOT NULL,
   scan_root_dir_id INTEGER NOT NULL,
+  create_time TIMESTAMP NOT NULL,
 
   UNIQUE(scan_root_dir_id, path)
 );
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS files (
   size INTEGER NOT NULL,
   hash VARCHAR NOT NULL,
   mod_time TIMESTAMP NOT NULL,
+  create_time TIMESTAMP NOT NULL,
 
   UNIQUE(dir_id, name)
 );

@@ -14,6 +14,7 @@ import (
 	"github.com/lomorage/lomo-backup/common/dbx"
 	"github.com/lomorage/lomo-backup/common/scan"
 	"github.com/lomorage/lomo-backup/common/types"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -25,9 +26,16 @@ var (
 
 func scanDir(ctx *cli.Context) (err error) {
 	if len(ctx.Args()) != 1 {
-		return errors.New("usage: lomob " + usage)
+		return errors.New("usage: lomob " + scanUsage)
 	}
 	scanRootDir, err = filepath.Abs(ctx.Args()[0])
+	if err != nil {
+		return err
+	}
+
+	nthreads := ctx.Int("threads")
+
+	err = initLogLevel(ctx.GlobalInt("log-level"))
 	if err != nil {
 		return err
 	}
@@ -42,10 +50,33 @@ func scanDir(ctx *cli.Context) (err error) {
 		return err
 	}
 
+	ignoreFiles := make(map[string]struct{})
+
+	for _, ignore := range strings.Split(ctx.String("ignore-files"), ",") {
+		ignoreFiles[ignore] = struct{}{}
+	}
+
+	ignoreDirs := make(map[string]struct{})
+
+	for _, ignore := range strings.Split(ctx.String("ignore-dirs"), ",") {
+		ignoreDirs[ignore] = struct{}{}
+	}
+
 	dirs = make(map[string]int)
 	lock = &sync.Mutex{}
 
-	return scan.Directory(scanRootDir, handleScan)
+	threads := make(chan scan.FileCallback, nthreads)
+	go func() {
+		for {
+			cb := <-threads
+			err = handleScan(cb.Path, cb.Info)
+			if err != nil {
+				logrus.Warnf("Error handling file %s: %s", cb.Path, err)
+			}
+		}
+	}()
+
+	return scan.Directory(scanRootDir, ignoreFiles, ignoreDirs, threads)
 }
 
 func selectOrInsertScanRootDir() error {
@@ -123,10 +154,12 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 }
 
 func handleScan(path string, info os.FileInfo) (err error) {
-	fmt.Printf("path %s: file %s\n", path, info.Name())
+	dir := strings.TrimSuffix(path, info.Name())
+	dir = strings.TrimPrefix(dir, scanRootDir)
+	dir = strings.Trim(dir, string(filepath.Separator))
 
-	dir := strings.TrimSuffix(path, string(filepath.Separator)+info.Name())
-	dir = strings.TrimPrefix(dir, scanRootDir+string(filepath.Separator))
+	logrus.Debugf("start scan %s", path)
+	defer logrus.Debugf("finish scan %s", path)
 
 	dirID, err := selectOrInsertDir(dir)
 	if err != nil {
