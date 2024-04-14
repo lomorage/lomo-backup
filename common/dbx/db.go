@@ -30,8 +30,9 @@ const (
 	getTotalFileSizeNotInIsoStmt = "select sum(size) from files where iso_id=0"
 	updateIsoIDStmt              = "update files set iso_id=%d where id in (%s)"
 
-	listIsosStmt  = "select id, name, size from isos"
-	insertIsoStmt = "insert into isos (name, size, create_time) values (?, ?, ?)"
+	getIsoByNameStmt = "select id, size, create_time from isos where name=?"
+	listIsosStmt     = "select id, name, size, create_time from isos where id in (select distinct iso_id from files)"
+	insertIsoStmt    = "insert into isos (name, size, create_time) values (?, ?, ?)"
 )
 
 const (
@@ -242,6 +243,23 @@ func (db *DB) TotalFileSizeNotInISO() (uint64, error) {
 	return totalSize, err
 }
 
+func (db *DB) GetIsoByName(name string) (*types.ISOInfo, error) {
+	iso := &types.ISOInfo{Name: name}
+	err := db.retryIfLocked("list ISOs",
+		func(tx *sql.Tx) error {
+			err := tx.QueryRow(getIsoByNameStmt, name).Scan(&iso.ID, &iso.Size, &iso.CreateTime)
+			return err
+		},
+	)
+	if err != nil {
+		if IsErrNoRow(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return iso, nil
+}
+
 func (db *DB) ListISOs() ([]*types.ISOInfo, error) {
 	isos := []*types.ISOInfo{}
 	err := db.retryIfLocked("list ISOs",
@@ -252,7 +270,7 @@ func (db *DB) ListISOs() ([]*types.ISOInfo, error) {
 			}
 			for rows.Next() {
 				iso := &types.ISOInfo{}
-				err = rows.Scan(&iso.ID, &iso.Name, &iso.Size)
+				err = rows.Scan(&iso.ID, &iso.Name, &iso.Size, &iso.CreateTime)
 				if err != nil {
 					return err
 				}

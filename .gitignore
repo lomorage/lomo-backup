@@ -21,4 +21,5 @@
 go.work
 
 cmd/lomob/lomob
-lomob.db
+*.iso
+*.db

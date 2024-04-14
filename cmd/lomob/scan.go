@@ -158,8 +158,8 @@ func handleScan(path string, info os.FileInfo) (err error) {
 	dir = strings.TrimPrefix(dir, scanRootDir)
 	dir = strings.Trim(dir, string(filepath.Separator))
 
-	logrus.Debugf("start scan %s", path)
-	defer logrus.Debugf("finish scan %s", path)
+	logrus.Debugf("Start scan %s", path)
+	defer logrus.Debugf("Finish scan %s", path)
 
 	dirID, err := selectOrInsertDir(dir)
 	if err != nil {

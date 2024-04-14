@@ -24,6 +24,8 @@ type FileInfo struct {
 type ISOInfo struct {
 	ID         int
 	Name       string
+	Location   string
+	Bucket     string
 	Size       int
 	CreateTime time.Time
 }

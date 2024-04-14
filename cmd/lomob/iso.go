@@ -7,18 +7,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/kdomanski/iso9660"
 	"github.com/lomorage/lomo-backup/common/datasize"
 	"github.com/lomorage/lomo-backup/common/types"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
 const volumePrefix = "lomobackup: "
 
-func mkiso(ctx *cli.Context) error {
+func mkISO(ctx *cli.Context) error {
 	isoSize, err := datasize.ParseString(ctx.String("iso-size"))
 	if err != nil {
 		return err
@@ -64,6 +66,16 @@ func mkiso(ctx *cli.Context) error {
 				currSize.HR(), expSize.HR())
 
 			return nil
+		}
+
+		iso, err := db.GetIsoByName(isoFilename)
+		if err != nil {
+			return err
+		}
+		if iso != nil {
+			return errors.Errorf("%s was created at %s, and its size is %s", isoFilename,
+				iso.CreateTime.Truncate(time.Second).Local(),
+				datasize.ByteSize(iso.Size).HR())
 		}
 
 		volumeIdentifier := volumePrefix + strings.TrimSuffix(isoFilename, filepath.Ext(isoFilename))
@@ -115,7 +127,7 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 		srcFilename := filepath.Join(scanRootDir, f.Name)
 		err = addIntoIso(srcFilename, f.Name, isoFilename, writer)
 		if err != nil {
-			logrus.Warnf("add %s into %s:%s: %s", srcFilename, isoFilename, f.Name, err)
+			logrus.Warnf("Add %s into %s:%s: %s", srcFilename, isoFilename, f.Name, err)
 			continue
 		}
 		fileIDs.WriteString(strconv.Itoa(f.ID))
@@ -137,10 +149,10 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 		_, count, err := db.CreateIsoWithFileIDs(&types.ISOInfo{Name: isoFilename, Size: int(isoSize)},
 			strings.TrimSuffix(fileIDs.String(), string(seperater)))
 		if err == nil && count != fileCount {
-			logrus.Warnf("expect to update %d files while updated %d files", fileCount, count)
+			logrus.Warnf("Expect to update %d files while updated %d files", fileCount, count)
 		}
 
-		logrus.Infof("update iso_id for %d files takes %s", count, time.Since(start).Truncate(time.Second).String())
+		logrus.Infof("Takes %s to update iso_id for %d files in DB", time.Since(start).Truncate(time.Second).String(), count)
 		return isoSize, files[idx+1:], err
 	}
 
@@ -148,7 +160,7 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 }
 
 func addIntoIso(srcFilename, dstFilename, isoFilename string, writer *iso9660.ImageWriter) error {
-	logrus.Debugf("add %s into %s:%s", srcFilename, isoFilename, dstFilename)
+	logrus.Debugf("Add %s into %s:%s", srcFilename, isoFilename, dstFilename)
 
 	fileToAdd, err := os.Open(srcFilename)
 	if err != nil {
@@ -157,4 +169,26 @@ func addIntoIso(srcFilename, dstFilename, isoFilename string, writer *iso9660.Im
 	defer fileToAdd.Close()
 
 	return writer.AddFile(fileToAdd, dstFilename)
+}
+
+func listISO(ctx *cli.Context) error {
+	err := initDB(ctx.GlobalString("db"))
+	if err != nil {
+		return err
+	}
+
+	isos, err := db.ListISOs()
+	if err != nil {
+		return err
+	}
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
+	defer writer.Flush()
+
+	fmt.Fprint(writer, "ID\tName\tSize\tCreate Time\n")
+	for _, iso := range isos {
+		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\n", iso.ID, iso.Name,
+			datasize.ByteSize(iso.Size).HR(),
+			iso.CreateTime.Truncate(time.Second).Local())
+	}
+	return nil
 }

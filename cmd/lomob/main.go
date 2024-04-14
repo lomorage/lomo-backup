@@ -60,15 +60,26 @@ func main() {
 			},
 		},
 		{
-			Name:      "mkiso",
-			Action:    mkiso,
-			Usage:     "group pictures and make iso",
-			ArgsUsage: mkisoUsage,
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "iso-size,s",
-					Usage: "Size of each ISO file",
-					Value: "1GB",
+			Name:  "iso",
+			Usage: "iso related commands",
+			Subcommands: cli.Commands{
+				{
+					Name:      "create",
+					Action:    mkISO,
+					Usage:     "group pictures and make iso",
+					ArgsUsage: mkisoUsage,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "iso-size,s",
+							Usage: "Size of each ISO file",
+							Value: "1GB",
+						},
+					},
+				},
+				{
+					Name:   "list",
+					Action: listISO,
+					Usage:  "list all files created files",
 				},
 			},
 		},
