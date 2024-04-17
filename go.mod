@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/djherbis/times v1.6.0 // indirect
 	github.com/kdomanski/iso9660 v0.4.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

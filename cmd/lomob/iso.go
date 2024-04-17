@@ -3,14 +3,16 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/kdomanski/iso9660"
+	"github.com/djherbis/times"
 	"github.com/lomorage/lomo-backup/common/datasize"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
@@ -98,19 +100,38 @@ func mkISO(ctx *cli.Context) error {
 	}
 }
 
+func keepTime(src, dst string) error {
+	ts, err := times.Stat(src)
+	if err != nil {
+		return err
+	}
+	return os.Chtimes(dst, ts.AccessTime(), ts.ModTime())
+}
+
+func createFileInStaging(srcFile, dstFile string) error {
+	src, err := os.Open(srcFile)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstFile)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(dst, src)
+
+	return err
+}
+
 func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDirs map[int]string,
 	files []*types.FileInfo) (uint64, []*types.FileInfo, error) {
-	writer, err := iso9660.NewWriter()
+	stagingDir, err := os.MkdirTemp("", "lomobackup-")
 	if err != nil {
 		return 0, nil, err
 	}
-	defer writer.Cleanup()
-
-	isoFile, err := os.Create(isoFilename)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer isoFile.Close()
+	defer os.RemoveAll(stagingDir)
 
 	var (
 		fileCount int
@@ -118,18 +139,39 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 	)
 	const seperater = ','
 	fileIDs := bytes.Buffer{}
+	dirsMap := map[string]string{} // dstDir -> srcDir
 	for idx, f := range files {
 		scanRootDir, ok := scanRootDirs[f.DirID]
 		if !ok {
 			logrus.Warnf("%s not found root scan dir %d", f.Name, f.DirID)
 			continue
 		}
-		srcFilename := filepath.Join(scanRootDir, f.Name)
-		err = addIntoIso(srcFilename, f.Name, isoFilename, writer)
+		srcFile := filepath.Join(scanRootDir, f.Name)
+		dstFile := filepath.Join(stagingDir, f.Name)
+
+		// create dir
+		dstDir := filepath.Dir(dstFile)
+		_, ok = dirsMap[dstDir]
+		if !ok {
+			err = os.MkdirAll(dstDir, 0744)
+			if err != nil {
+				logrus.Warnf("Create staging dir %s: %s", filepath.Dir(dstFile), err)
+				continue
+			}
+			dirsMap[dstDir] = filepath.Dir(srcFile)
+		}
+
+		err = createFileInStaging(srcFile, dstFile)
 		if err != nil {
-			logrus.Warnf("Add %s into %s:%s: %s", srcFilename, isoFilename, f.Name, err)
+			logrus.Warnf("Add %s into %s:%s: %s", srcFile, isoFilename, dstFile, err)
 			continue
 		}
+
+		err = keepTime(srcFile, dstFile)
+		if err != nil {
+			logrus.Warnf("Keep file original timestamp %s: %s", srcFile, err)
+		}
+
 		fileIDs.WriteString(strconv.Itoa(f.ID))
 		fileIDs.WriteRune(seperater)
 
@@ -139,8 +181,18 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 			continue
 		}
 
-		err = writer.WriteTo(isoFile, volumeIdentifier)
+		// change all destination directory's last modify time and access time
+		for dst, src := range dirsMap {
+			err = keepTime(src, dst)
+			if err != nil {
+				logrus.Warnf("Keep dir original timestamp %s: %s", src, err)
+			}
+		}
+
+		out, err := exec.Command("mkisofs", "-R", "-V", volumeIdentifier, "-o", isoFilename,
+			stagingDir).CombinedOutput()
 		if err != nil {
+			fmt.Println(string(out))
 			return 0, nil, err
 		}
 
@@ -157,18 +209,6 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 	}
 
 	return isoSize, nil, nil
-}
-
-func addIntoIso(srcFilename, dstFilename, isoFilename string, writer *iso9660.ImageWriter) error {
-	logrus.Debugf("Add %s into %s:%s", srcFilename, isoFilename, dstFilename)
-
-	fileToAdd, err := os.Open(srcFilename)
-	if err != nil {
-		return err
-	}
-	defer fileToAdd.Close()
-
-	return writer.AddFile(fileToAdd, dstFilename)
 }
 
 func listISO(ctx *cli.Context) error {
