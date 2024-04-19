@@ -22,7 +22,7 @@ const (
 	insertDirStmt               = "insert into dirs (path, scan_root_dir_id, create_time) values (?, ?, ?)"
 	getDirIDByPathAndRootIDStmt = "select id from dirs where path = ? and scan_root_dir_id = ?"
 
-	listFilesNotInIsoStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
+	listFilesNotInIsoStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.mod_time from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
 	listFilesBySizeStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.size >= ? order by f.size DESC"
@@ -198,7 +198,7 @@ func (db *DB) InsertFile(f *types.FileInfo) (int, error) {
 		func(tx *sql.Tx) error {
 			res, err := tx.Exec(insertFileStmt, f.DirID, f.Name,
 				strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Name), ".")),
-				f.Size, f.Hash, f.ModTime.UTC(), time.Now().UTC())
+				f.Size, f.Hash, f.ModTime, time.Now())
 			if err != nil {
 				return err
 			}
@@ -221,7 +221,7 @@ func (db *DB) ListFilesNotInISO() ([]*types.FileInfo, error) {
 			for rows.Next() {
 				var path, name string
 				f := &types.FileInfo{}
-				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size)
+				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size, &f.ModTime)
 				if err != nil {
 					return err
 				}

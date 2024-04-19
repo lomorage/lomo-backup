@@ -20,7 +20,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-const volumePrefix = "lomobackup: "
+var futuretime = time.Date(3000, time.December, 31, 0, 0, 0, 0, time.Now().UTC().Location())
 
 func mkISO(ctx *cli.Context) error {
 	isoSize, err := datasize.ParseString(ctx.String("iso-size"))
@@ -56,8 +56,6 @@ func mkISO(ctx *cli.Context) error {
 	var isoFilename string
 	if len(ctx.Args()) > 0 {
 		isoFilename = ctx.Args()[0]
-	} else {
-		isoFilename = time.Now().Format("2006-01-02T15-04-05") + ".iso"
 	}
 
 	for {
@@ -80,14 +78,12 @@ func mkISO(ctx *cli.Context) error {
 				datasize.ByteSize(iso.Size).HR())
 		}
 
-		volumeIdentifier := volumePrefix + strings.TrimSuffix(isoFilename, filepath.Ext(isoFilename))
-
-		size, leftFiles, err := createIso(isoSize.Bytes(), isoFilename, volumeIdentifier, scanRootDirs, files)
+		size, filename, leftFiles, err := createIso(isoSize.Bytes(), isoFilename, scanRootDirs, files)
 		if err != nil {
 			return err
 		}
 		logrus.Infof("%d files (%s) are added into %s, and %d files (%s) need to be added",
-			len(files)-len(leftFiles), datasize.ByteSize(size).HR(), isoFilename,
+			len(files)-len(leftFiles), datasize.ByteSize(size).HR(), filename,
 			len(leftFiles), datasize.ByteSize(currentSizeNotInISO-size).HR())
 
 		if len(ctx.Args()) > 0 {
@@ -96,7 +92,6 @@ func mkISO(ctx *cli.Context) error {
 		}
 		files = leftFiles
 		currentSizeNotInISO -= size
-		isoFilename = time.Now().Format("2006-01-02T15-04-05") + ".iso"
 	}
 }
 
@@ -125,19 +120,21 @@ func createFileInStaging(srcFile, dstFile string) error {
 	return err
 }
 
-func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDirs map[int]string,
-	files []*types.FileInfo) (uint64, []*types.FileInfo, error) {
+func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
+	files []*types.FileInfo) (uint64, string, []*types.FileInfo, error) {
 	stagingDir, err := os.MkdirTemp("", "lomobackup-")
 	if err != nil {
-		return 0, nil, err
+		return 0, "", nil, err
 	}
 	defer os.RemoveAll(stagingDir)
 
+	const seperater = ','
 	var (
 		fileCount int
 		isoSize   uint64
+		end       time.Time
 	)
-	const seperater = ','
+	start := futuretime
 	fileIDs := bytes.Buffer{}
 	dirsMap := map[string]string{} // dstDir -> srcDir
 	for idx, f := range files {
@@ -167,6 +164,13 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 			continue
 		}
 
+		if f.ModTime.Before(start) {
+			start = f.ModTime
+		}
+		if f.ModTime.After(end) {
+			end = f.ModTime
+		}
+
 		err = keepTime(srcFile, dstFile)
 		if err != nil {
 			logrus.Warnf("Keep file original timestamp %s: %s", srcFile, err)
@@ -189,11 +193,17 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 			}
 		}
 
-		out, err := exec.Command("mkisofs", "-R", "-V", volumeIdentifier, "-o", isoFilename,
+		name := fmt.Sprintf("%d-%02d-%02d--%d-%02d-%02d", start.Year(), start.Month(), start.Day(),
+			end.Year(), end.Month(), end.Day())
+		if isoFilename == "" {
+			isoFilename = name + ".iso"
+		}
+
+		out, err := exec.Command("mkisofs", "-R", "-V", "lomorage: "+name, "-o", isoFilename,
 			stagingDir).CombinedOutput()
 		if err != nil {
 			fmt.Println(string(out))
-			return 0, nil, err
+			return 0, "", nil, err
 		}
 
 		// create db entry and update file info
@@ -205,10 +215,10 @@ func createIso(maxSize uint64, isoFilename, volumeIdentifier string, scanRootDir
 		}
 
 		logrus.Infof("Takes %s to update iso_id for %d files in DB", time.Since(start).Truncate(time.Second).String(), count)
-		return isoSize, files[idx+1:], err
+		return isoSize, isoFilename, files[idx+1:], err
 	}
 
-	return isoSize, nil, nil
+	return isoSize, isoFilename, nil, nil
 }
 
 func listISO(ctx *cli.Context) error {

@@ -1,0 +1,1 @@
+sqlite3 ./lomob.db "delete from isos"; sqlite3 lomob.db "update files set iso_id=0"; rm *.iso

@@ -71,8 +71,8 @@ func main() {
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:  "iso-size,s",
-							Usage: "Size of each ISO file",
-							Value: "1GB",
+							Usage: "Size of each ISO file. KB=1000 Byte",
+							Value: "5GB",
 						},
 					},
 				},
