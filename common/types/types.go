@@ -29,3 +29,15 @@ type ISOInfo struct {
 	Size       int
 	CreateTime time.Time
 }
+
+// PartInfo is struct for one upload part of one iso file
+type PartInfo struct {
+	IsoID      int
+	PartNo     int
+	Size       int
+	Bucket     string
+	Hash       string
+	UploadKey  string
+	UploadID   string
+	CreateTime time.Time
+}

@@ -79,7 +79,44 @@ func main() {
 				{
 					Name:   "list",
 					Action: listISO,
-					Usage:  "List all files created files",
+					Usage:  "List all created iso files",
+				},
+				{
+					Name:   "upload",
+					Action: uploadISO,
+					Usage:  "Upload specified or all iso files",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
+						},
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: "lomorage",
+						},
+						cli.StringFlag{
+							Name:  "part-size,p",
+							Usage: "Size of each upload partition. KB=1000 Byte",
+							Value: "200MB",
+						},
+						cli.IntFlag{
+							Name:  "nthreads,n",
+							Usage: "Number of parallel multi part upload",
+							Value: 3,
+						},
+					},
 				},
 			},
 		},
