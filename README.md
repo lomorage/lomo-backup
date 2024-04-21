@@ -1,5 +1,7 @@
 # Motivation
-I have local disk to back up my photos and videos, but need a solution to backup to cloud in case of any diaster. The solution should meet below requirements:
+Photos/videos are very import personal assets and we want to store in our home instead of clouds. We developped lomorage application to self host our own google photo alternative solutions, which has met our main goal.
+
+At the same time, backup is extremely important as we don't want to lost any photos by accident. Current lomorage application can daily backup to another disk, or NAS via rsync, but it is still hosted at home. We want diaster recovery ability. We want to implement a peer backup solution which allows me to back up photos / videos to my parents' or sisters' or brothers' or friends' home, which will be our final goal, but we need a fast reliable way before that solution really works. Seems storing into cloud like Glancier would be one alternative. The solution should meet below requirements:
 1. price is as cheap as possible
 2. run backup daily
 3. run consistency check monthly and send me alert if cloud version is different from my local version
@@ -49,3 +51,19 @@ Development phase 3:
 Development phase 4:
 1. daily consistency check on staging station
 2. monthly consistency check on Glancier3. send email alert if anything is wrong.
+
+# Support us
+If you find Lomo-Backup is useful, please support us below:
+
+<a href="https://www.buymeacoffee.com/lomorage" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
+<a href="https://opencollective.com/lomoware/donate" target="_blank">
+  <img src="https://opencollective.com/webpack/donate/button@2x.png?color=blue" width=300 />
+</a>
+
+Also welcome to try our free Photo backup applications: 
+
+# Feature highlights
+- Multipart upload to S3
+- Resume upload if one part was fail
+- Self define iso size

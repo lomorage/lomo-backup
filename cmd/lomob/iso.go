@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/djherbis/times"
+	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
@@ -206,9 +207,15 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 			return 0, "", nil, err
 		}
 
+		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(isoSize)}
+
+		isoInfo.Hash, err = common.CalculateHash(isoFilename)
+		if err != nil {
+			return 0, "", nil, err
+		}
 		// create db entry and update file info
 		start := time.Now()
-		_, count, err := db.CreateIsoWithFileIDs(&types.ISOInfo{Name: isoFilename, Size: int(isoSize)},
+		_, count, err := db.CreateIsoWithFileIDs(isoInfo,
 			strings.TrimSuffix(fileIDs.String(), string(seperater)))
 		if err == nil && count != fileCount {
 			logrus.Warnf("Expect to update %d files while updated %d files", fileCount, count)
@@ -231,14 +238,19 @@ func listISO(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println(isos)
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
 	defer writer.Flush()
 
-	fmt.Fprint(writer, "ID\tName\tSize\tCreate Time\n")
+	fmt.Fprint(writer, "ID\tName\tSize\tStatus\tRegion\tBucket\tFiles Count\tCreate Time\tHash\n")
 	for _, iso := range isos {
-		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\n", iso.ID, iso.Name,
-			datasize.ByteSize(iso.Size).HR(),
-			iso.CreateTime.Truncate(time.Second).Local())
+		_, count, err := db.GetTotalFilesInIso(iso.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", iso.ID, iso.Name,
+			datasize.ByteSize(iso.Size).HR(), iso.Status, iso.Region, iso.Bucket, count,
+			iso.CreateTime.Truncate(time.Second).Local().Format("2006-01-02 15:04:05"), iso.Hash)
 	}
 	return nil
 }

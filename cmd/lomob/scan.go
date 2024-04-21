@@ -1,16 +1,13 @@
 package main
 
 import (
-	"crypto/sha256"
 	"errors"
-	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/dbx"
 	"github.com/lomorage/lomo-backup/common/scan"
 	"github.com/lomorage/lomo-backup/common/types"
@@ -130,15 +127,9 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		return nil
 	}
 
-	f, err := os.Open(path)
+	hash, err := common.CalculateHash(path)
 	if err != nil {
 		return err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		log.Fatal(err)
 	}
 
 	fi = &types.FileInfo{
@@ -146,7 +137,7 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		Name:    info.Name(),
 		Size:    int(info.Size()),
 		ModTime: info.ModTime(),
-		Hash:    fmt.Sprintf("%x", h.Sum(nil)),
+		Hash:    hash,
 	}
 
 	_, err = db.InsertFile(fi)

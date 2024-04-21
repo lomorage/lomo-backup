@@ -2,6 +2,29 @@ package types
 
 import "time"
 
+type IsoStatus int
+
+const (
+	Creating IsoStatus = iota
+	Created
+	Uploading
+	Uploaded
+)
+
+func (s IsoStatus) String() string {
+	switch s {
+	case Creating:
+		return "Creating"
+	case Created:
+		return "Created, not uploaded"
+	case Uploading:
+		return "Uploadinging"
+	case Uploaded:
+		return "Uploaded"
+	}
+	return "Unknown"
+}
+
 // DirInfo is structure for directory
 type DirInfo struct {
 	ID            int
@@ -24,9 +47,11 @@ type FileInfo struct {
 type ISOInfo struct {
 	ID         int
 	Name       string
-	Location   string
+	Region     string
 	Bucket     string
+	Hash       string
 	Size       int
+	Status     IsoStatus
 	CreateTime time.Time
 }
 

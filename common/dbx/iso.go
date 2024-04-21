@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/lomorage/lomo-backup/common/types"
@@ -14,17 +15,22 @@ const (
 	listFilesNotInIsoStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.mod_time from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
 	getTotalFileSizeNotInIsoStmt = "select sum(size) from files where iso_id=0"
+	getTotalFilesInIsoStmt       = "select sum(size), count(size) from files where iso_id=?"
 	updateIsoIDStmt              = "update files set iso_id=%d where id in (%s)"
 
 	getIsoByNameStmt = "select id, size, create_time from isos where name=?"
-	listIsosStmt     = "select id, name, size, create_time from isos where id in (select distinct iso_id from files)"
-	insertIsoStmt    = "insert into isos (name, size, create_time) values (?, ?, ?)"
+	listIsosStmt     = "select id, name, size, status, region, bucket, hash, create_time from isos"
+	insertIsoStmt    = "insert into isos (name, size, status, hash, create_time) values (?, ?, ?, ?, ?)"
+
+	updateIsoStatusStmt       = "update isos set status=? where iso_id=?"
+	updateIsoRegionBucketStmt = "update isos set status=?, region=?, bucket=? where iso_id=?"
 
 	insertPartStmt = "insert into parts (iso_id, part_no, bucket, hash, size, uploaded_size, upload_key, upload_id," +
 		"create_time) values (?, ?, ?, ?, ?, 0, ?, ?, ?)"
 	getPartsByIsoIDStmt = "select part_no, bucket, hash, size, uploaded_size, upload_key, upload_id, create_time " +
 		"from parts where iso_id=?"
-	deletePartsByIsoIDStmt = "delete from parts where iso_id=?"
+	deletePartsByIsoIDStmt   = "delete from parts where iso_id=?"
+	updatePartUploadSizeStmt = "update parts set uploaded_size=? where iso_id=? and part_no=?"
 )
 
 func (db *DB) ListFilesNotInISO() ([]*types.FileInfo, error) {
@@ -63,6 +69,16 @@ func (db *DB) TotalFileSizeNotInISO() (uint64, error) {
 	return totalSize, err
 }
 
+func (db *DB) GetTotalFilesInIso(isoID int) (uint64, uint64, error) {
+	var totalSize, totalCount uint64
+	err := db.retryIfLocked("get total file info in ISO "+strconv.Itoa(isoID),
+		func(tx *sql.Tx) error {
+			return tx.QueryRow(getTotalFilesInIsoStmt, isoID).Scan(&totalSize, &totalCount)
+		},
+	)
+	return totalSize, totalCount, err
+}
+
 func (db *DB) GetIsoByName(name string) (*types.ISOInfo, error) {
 	iso := &types.ISOInfo{Name: name}
 	err := db.retryIfLocked("list ISOs",
@@ -90,7 +106,8 @@ func (db *DB) ListISOs() ([]*types.ISOInfo, error) {
 			}
 			for rows.Next() {
 				iso := &types.ISOInfo{}
-				err = rows.Scan(&iso.ID, &iso.Name, &iso.Size, &iso.CreateTime)
+				err = rows.Scan(&iso.ID, &iso.Name, &iso.Size, &iso.Status, &iso.Region, &iso.Bucket,
+					&iso.Hash, &iso.CreateTime)
 				if err != nil {
 					return err
 				}
@@ -121,7 +138,7 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 	var isoID, updatedFiles int64
 	err := db.retryIfLocked(fmt.Sprintf("insert iso %s", iso.Name),
 		func(tx *sql.Tx) error {
-			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, time.Now().UTC())
+			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, types.Created, iso.Hash, time.Now().UTC())
 			if err != nil {
 				return err
 			}
