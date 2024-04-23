@@ -36,21 +36,20 @@ Workflow:
 2. When reaching configured disk threshold, archive the files and make into ISO file, save into Glancier, delete backup ones from free storage
 3. one metadata file or sqlite db file specifies which files are in which ISO file, or free storage
 
-Development phase 1:
-1. pack all photos/videos into multiple ISOs and upload to Glancier
-2. metadata to track which file is in which iso
-   
-Development phase 2:
-1. daily backup new files to staging station
-2. metadata to track which new files are in staging station
+Pre-requsition commands:
+- mount / umount: validate ISO and print all files
+- tree: print dirs/files in mounted ISO in tree-like structure
 
-Development phase 3:
-1. auto pack new files into ISO, and archive to Glancier
-2. metadata to be updated for new location
+Features:
 
-Development phase 4:
-1. daily consistency check on staging station
-2. monthly consistency check on Glancier3. send email alert if anything is wrong.
+- :heavy_check_mark: pack all photos/videos into multiple ISOs and upload to Glancier
+- [ ] metadata to track which file is in which iso
+- [ ] backup files not in ISO to staging station
+- [ ] metadata to track which files are in staging station
+- [ ] daemon running mode to watch folder change only, avoid scanning all folder daily
+- [ ] daily consistency check on staging station
+- [ ] monthly consistency check on Glancier3. send email alert if anything is wrong.
+- [ ] multi platform support: port to windows and avoid mount/tree command to print tree structure
 
 # Support us
 If you find Lomo-Backup is useful, please support us below:
@@ -67,3 +66,95 @@ Also welcome to try our free Photo backup applications:
 - Multipart upload to S3
 - Resume upload if one part was fail
 - Self define iso size
+
+# Usage
+## Overall options and sub commands
+
+```
+$ ./lomob --help
+NAME:
+   lomob - Backup files to remote storage with 2 stage approach
+
+USAGE:
+   lomob [global options] command [command options] [arguments...]
+
+AUTHOR:
+    <support@lomorage.com>
+
+COMMANDS:
+   scan     Scan all files under given directory
+   iso      ISO related commands
+   list     List scanned files related commands
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --db value                   Filename of DB (default: "lomob.db")
+   --log-level value, -l value  Log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel (default: 4)
+   --help, -h                   show help
+```
+## Scan related
+### Scan given directory
+
+```
+$ ./lomob scan --help
+NAME:
+   lomob scan - Scan all files under given directory
+
+USAGE:
+   lomob scan [command options] [directory to scan]
+
+OPTIONS:
+   --ignore-files value, --if value  List of ignored files, seperated by comman (default: ".DS_Store,._.DS_Store,Thumbs.db")
+   --ignore-dirs value, --in value   List of ignored directories, seperated by comman (default: ".idea,.git,.github")
+   --threads value, -t value         Number of scan threads in parallel (default: 20)
+```
+### List scanned directory
+
+```
+$ ./lomob list dirs -h
+NAME:
+   lomob list dirs - List all scanned directories
+```
+
+### List big files scanned currently
+```
+$ ./lomob list bigfiles -h
+NAME:
+   lomob list bigfiles - List big files
+
+USAGE:
+   lomob list bigfiles [command options] [arguments...]
+
+OPTIONS:
+   --file-size value, -s value  Minimum file size in the list result. KB=1000 Byte (default: "50MB")
+```
+
+## ISO related
+### Create ISO
+
+```
+$ ./lomob iso create -h
+NAME:
+   lomob iso create - Group scanned files and make iso
+
+USAGE:
+   lomob iso create [command options] [iso filename. if empty, filename will be <oldest file name>--<latest filename>.iso]
+
+OPTIONS:
+   --iso-size value, -s value  Size of each ISO file. KB=1000 Byte (default: "5GB")
+```
+
+### List created ISOs
+```
+$ ./lomob iso list -h
+NAME:
+   lomob iso list - List all created iso files
+
+$ ./lomob iso list
+[0xc000415ea0 0xc000415f10]
+ID    Name                          Size       Status                   Region    Bucket    Files Count    Create Time            Hash
+1     2024-04-13--2024-04-20.iso    21.9 MB    Created, not uploaded                        7              2024-04-20 20:53:31    d5cd6b88e766d417995f715ddc03dd19450f74ecee9b2d6804d1e7c55559fb81
+2     2024-04-11--2024-04-20.iso    14.0 MB    Created, not uploaded                        290            2024-04-20 20:53:32    b5474aeaacd7cd5fea0f41ba4ed18b298224031ff5ff008b9ff5a25fdcaea2b2
+```
+
+### Upload ISO

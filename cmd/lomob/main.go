@@ -11,9 +11,8 @@ import (
 )
 
 var (
-	scanUsage  = "[directory to scan]"
-	mkisoUsage = "[local directory to store isos]"
-	db         *dbx.DB
+	scanUsage = "[directory to scan]"
+	db        *dbx.DB
 
 	lock *sync.Mutex
 )
@@ -67,12 +66,16 @@ func main() {
 					Name:      "create",
 					Action:    mkISO,
 					Usage:     "Group scanned files and make iso",
-					ArgsUsage: mkisoUsage,
+					ArgsUsage: "[iso filename. if empty, filename will be <oldest file name>--<latest filename>.iso]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:  "iso-size,s",
 							Usage: "Size of each ISO file. KB=1000 Byte",
 							Value: "5GB",
+						},
+						cli.StringFlag{
+							Name:  "store-dir,p",
+							Usage: "Directory to store the ISOs. It's urrent directory by default",
 						},
 					},
 				},
@@ -125,14 +128,13 @@ func main() {
 			Usage: "List scanned files related commands",
 			Subcommands: cli.Commands{
 				{
-					Name:      "bigfiles",
-					Action:    listBigfiles,
-					Usage:     "List big files",
-					ArgsUsage: mkisoUsage,
+					Name:   "bigfiles",
+					Action: listBigfiles,
+					Usage:  "List big files",
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:  "file-size,s",
-							Usage: "Minimum file size in the list result",
+							Usage: "Minimum file size in the list result. KB=1000 Byte",
 							Value: "50MB",
 						},
 					},
