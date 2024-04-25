@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS dirs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path VARCHAR NOT NULL,
   scan_root_dir_id INTEGER NOT NULL,
+  mod_time TIMESTAMP,
   create_time TIMESTAMP NOT NULL,
 
   UNIQUE(scan_root_dir_id, path)

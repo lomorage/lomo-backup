@@ -29,7 +29,12 @@ func (s IsoStatus) String() string {
 type DirInfo struct {
 	ID            int
 	ScanRootDirID int
+	NumberOfFiles int
+	NumberOfDirs  int
+	TotalFileSize int
 	Path          string
+	ModTime       time.Time
+	CreateTime    time.Time
 }
 
 // FileInfo is structure for file

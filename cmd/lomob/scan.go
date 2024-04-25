@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/dbx"
@@ -15,10 +17,15 @@ import (
 	"github.com/urfave/cli"
 )
 
+type scanDirInfo struct {
+	id      int
+	modTime *time.Time
+}
+
 var (
 	scanRootDir   string
 	scanRootDirID int
-	dirs          map[string]int
+	dirs          map[string]scanDirInfo
 )
 
 func scanDir(ctx *cli.Context) (err error) {
@@ -59,13 +66,13 @@ func scanDir(ctx *cli.Context) (err error) {
 		ignoreDirs[ignore] = struct{}{}
 	}
 
-	dirs = make(map[string]int)
+	dirs = make(map[string]scanDirInfo)
 	lock = &sync.Mutex{}
 
-	threads := make(chan scan.FileCallback, nthreads)
+	ch := make(chan scan.FileCallback, nthreads)
 	go func() {
 		for {
-			cb := <-threads
+			cb := <-ch
 			err = handleScan(cb.Path, cb.Info)
 			if err != nil {
 				logrus.Warnf("Error handling file %s: %s", cb.Path, err)
@@ -73,7 +80,7 @@ func scanDir(ctx *cli.Context) (err error) {
 		}
 	}()
 
-	return scan.Directory(scanRootDir, ignoreFiles, ignoreDirs, threads)
+	return scan.Directory(scanRootDir, ignoreFiles, ignoreDirs, ch)
 }
 
 func selectOrInsertScanRootDir() error {
@@ -85,20 +92,34 @@ func selectOrInsertScanRootDir() error {
 		scanRootDirID = *id
 		return nil
 	}
-	scanRootDirID, err = db.InsertDir(scanRootDir, dbx.SuperScanRootDirID)
+
+	info, err := os.Stat(scanRootDir)
+	if err != nil {
+		return err
+	}
+	t := info.ModTime()
+	scanRootDirID, err = db.InsertDir(scanRootDir, dbx.SuperScanRootDirID, &t)
 	return err
 }
 
-func selectOrInsertDir(dir string) (dirID int, err error) {
+func selectOrInsertDir(dir string, modTime *time.Time) (dirID int, err error) {
 	// check dir is inserted or not before
-	var ok bool
-
 	lock.Lock()
 	defer lock.Unlock()
 
-	dirID, ok = dirs[dir]
+	info, ok := dirs[dir]
 	if ok {
-		return
+		if info.modTime != nil || modTime == nil {
+			return info.id, nil
+		}
+		fmt.Printf("update dir %s: %v\n", dir, modTime)
+		err := db.UpdateDirModTime(info.id, *modTime)
+		if err != nil {
+			return 0, err
+		}
+		info.modTime = modTime
+		dirs[dir] = info
+		return info.id, nil
 	}
 	id, err := db.GetDirIDByPathAndRootID(dir, scanRootDirID)
 	if err != nil {
@@ -107,13 +128,13 @@ func selectOrInsertDir(dir string) (dirID int, err error) {
 	if id != nil {
 		dirID = *id
 	} else {
-		dirID, err = db.InsertDir(dir, scanRootDirID)
+		fmt.Printf("insert dir %s: %v\n", dir, modTime)
+		dirID, err = db.InsertDir(dir, scanRootDirID, modTime)
 		if err != nil {
 			return
 		}
 	}
-	dirs[dir] = dirID
-
+	dirs[dir] = scanDirInfo{id: dirID, modTime: modTime}
 	return
 }
 
@@ -144,15 +165,25 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 	return err
 }
 
-func handleScan(path string, info os.FileInfo) (err error) {
+func handleScan(path string, info os.FileInfo) error {
+	if info.IsDir() {
+		dir := strings.TrimPrefix(path, scanRootDir)
+		dir = strings.Trim(dir, string(filepath.Separator))
+		logrus.Infof("Start scan %s: %s", path, dir)
+		t := info.ModTime()
+		_, err := selectOrInsertDir(dir, &t)
+		return err
+	}
+
 	dir := strings.TrimSuffix(path, info.Name())
 	dir = strings.TrimPrefix(dir, scanRootDir)
 	dir = strings.Trim(dir, string(filepath.Separator))
 
-	logrus.Debugf("Start scan %s", path)
-	defer logrus.Debugf("Finish scan %s", path)
+	logrus.Debugf("Start scan file %s", path)
+	defer logrus.Debugf("Finish scan file %s", path)
 
-	dirID, err := selectOrInsertDir(dir)
+	// not sure mod time,thus pass nill, and let other routine to update the data
+	dirID, err := selectOrInsertDir(dir, nil)
 	if err != nil {
 		return err
 	}

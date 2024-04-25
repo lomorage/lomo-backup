@@ -21,31 +21,7 @@ func Directory(root string, ignoreFiles, ignoreDirs map[string]struct{},
 	ch chan FileCallback) error {
 	var wg sync.WaitGroup
 
-	// Launch a goroutine for each directory
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			if errPermissionRegex.MatchString(err.Error()) {
-				if entry.IsDir() {
-					return fs.SkipDir
-				}
-				// skip this file only
-				return nil
-			}
-			return err
-		}
-		if entry.IsDir() {
-			_, ignore := ignoreDirs[entry.Name()]
-			if ignore {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		_, ignore := ignoreFiles[entry.Name()]
-		if ignore {
-			return nil
-		}
-
+	processItem := func(path string, entry fs.DirEntry) error {
 		info, err := entry.Info()
 		if err != nil {
 			return err
@@ -61,8 +37,35 @@ func Directory(root string, ignoreFiles, ignoreDirs map[string]struct{},
 			defer wg.Done()
 			ch <- FileCallback{Path: path, Info: info}
 		}()
-
 		return nil
+	}
+	// Launch a goroutine for each directory
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			if errPermissionRegex.MatchString(err.Error()) {
+				if entry.IsDir() {
+					return fs.SkipDir
+				}
+				// skip this file only
+				return nil
+			}
+			return err
+		}
+
+		if entry.IsDir() {
+			_, ignore := ignoreDirs[entry.Name()]
+			if ignore {
+				return fs.SkipDir
+			}
+			return processItem(path, entry)
+		}
+
+		_, ignore := ignoreFiles[entry.Name()]
+		if ignore {
+			return nil
+		}
+
+		return processItem(path, entry)
 	})
 	if err != nil {
 		return err

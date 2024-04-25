@@ -143,6 +143,12 @@ func main() {
 					Name:   "dirs",
 					Action: listScanedDirs,
 					Usage:  "List all scanned directories",
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "table-view, t",
+							Usage: "List all directories in table",
+						},
+					},
 				},
 			},
 		},

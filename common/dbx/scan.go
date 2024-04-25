@@ -3,6 +3,7 @@ package dbx
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,9 +13,12 @@ import (
 )
 
 const (
-	listDirsStmt                = "select id, path, scan_root_dir_id from dirs"
+	listDirsStmt                = "select id, path, scan_root_dir_id, mod_time, create_time from dirs"
 	insertDirStmt               = "insert into dirs (path, scan_root_dir_id, create_time) values (?, ?, ?)"
+	insertDirWithModTimeStmt    = "insert into dirs (path, scan_root_dir_id, mod_time, create_time) values (?, ?, ?, ?)"
+	updateDirModtimeStmt        = "update dirs set mod_time=? where id=?"
 	getDirIDByPathAndRootIDStmt = "select id from dirs where path = ? and scan_root_dir_id = ?"
+	getTotalFilesInDirStmt      = "select COALESCE(sum(size), 0), count(size) from files where dir_id=?"
 
 	listFilesBySizeStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.size >= ? order by f.size DESC"
@@ -48,11 +52,19 @@ func (db *DB) GetDirIDByPathAndRootID(path string, scanRootDirID int) (*int, err
 	return id, err
 }
 
-func (db *DB) InsertDir(path string, scanRootDirID int) (int, error) {
+func (db *DB) InsertDir(path string, scanRootDirID int, modTime *time.Time) (int, error) {
 	var id int64
 	err := db.retryIfLocked(fmt.Sprintf("insert dir %d/%s", scanRootDirID, path),
 		func(tx *sql.Tx) error {
-			res, err := tx.Exec(insertDirStmt, path, scanRootDirID, time.Now().UTC())
+			var (
+				res sql.Result
+				err error
+			)
+			if modTime != nil {
+				res, err = tx.Exec(insertDirWithModTimeStmt, path, scanRootDirID, modTime, time.Now().UTC())
+			} else {
+				res, err = tx.Exec(insertDirStmt, path, scanRootDirID, time.Now().UTC())
+			}
 			if err != nil {
 				return err
 			}
@@ -61,6 +73,15 @@ func (db *DB) InsertDir(path string, scanRootDirID int) (int, error) {
 		},
 	)
 	return int(id), err
+}
+
+func (db *DB) UpdateDirModTime(dirID int, modTime time.Time) error {
+	return db.retryIfLocked(fmt.Sprintf("update dir %d's mod time %s", dirID, modTime),
+		func(tx *sql.Tx) error {
+			_, err := tx.Exec(updateDirModtimeStmt, modTime, dirID)
+			return err
+		},
+	)
 }
 
 func (db *DB) ListDirs() (map[int]*types.DirInfo, error) {
@@ -73,7 +94,16 @@ func (db *DB) ListDirs() (map[int]*types.DirInfo, error) {
 			}
 			for rows.Next() {
 				dir := &types.DirInfo{}
-				err = rows.Scan(&dir.ID, &dir.Path, &dir.ScanRootDirID)
+				err = rows.Scan(&dir.ID, &dir.Path, &dir.ScanRootDirID, &dir.ModTime, &dir.CreateTime)
+				if err != nil {
+					return err
+				}
+
+				err = tx.QueryRow(getTotalFilesInDirStmt, dir.ID).Scan(&dir.TotalFileSize, &dir.NumberOfFiles)
+				if err != nil {
+					return err
+				}
+				dir.NumberOfDirs, err = db.getNumberOfChildDirsInDir(tx, dir.Path)
 				if err != nil {
 					return err
 				}
@@ -82,7 +112,29 @@ func (db *DB) ListDirs() (map[int]*types.DirInfo, error) {
 			return rows.Err()
 		},
 	)
+
 	return dirs, err
+}
+
+func (db *DB) getNumberOfChildDirsInDir(tx *sql.Tx, path string) (int, error) {
+	getChildDirsInDirStmt := "select path from dirs where path like '" + path + string(os.PathSeparator) + "%'"
+	rows, err := tx.Query(getChildDirsInDirStmt)
+	if err != nil {
+		return 0, nil
+	}
+
+	count := 0
+	for rows.Next() {
+		var subdir string
+		err = rows.Scan(&subdir)
+		if err != nil {
+			return 0, err
+		}
+		if filepath.Dir(subdir) == path {
+			count++
+		}
+	}
+	return count, rows.Err()
 }
 
 func (db *DB) ListScanRootDirs() (map[int]string, error) {

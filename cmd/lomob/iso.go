@@ -250,7 +250,7 @@ func listISO(ctx *cli.Context) error {
 		}
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", iso.ID, iso.Name,
 			datasize.ByteSize(iso.Size).HR(), iso.Status, iso.Region, iso.Bucket, count,
-			iso.CreateTime.Truncate(time.Second).Local().Format("2006-01-02 15:04:05"), iso.Hash)
+			common.FormatTime(iso.CreateTime.Truncate(time.Second).Local()), iso.Hash)
 	}
 	return nil
 }

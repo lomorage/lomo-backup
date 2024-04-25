@@ -37,8 +37,8 @@ Workflow:
 3. one metadata file or sqlite db file specifies which files are in which ISO file, or free storage
 
 Pre-requsition commands:
+- mkisofs: generate iso file
 - mount / umount: validate ISO and print all files
-- tree: print dirs/files in mounted ISO in tree-like structure
 
 Features:
 
