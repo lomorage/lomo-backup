@@ -132,7 +132,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 	const seperater = ','
 	var (
 		fileCount int
-		isoSize   uint64
+		filesSize uint64
 		end       time.Time
 	)
 	start := futuretime
@@ -181,8 +181,8 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		fileIDs.WriteRune(seperater)
 
 		fileCount++
-		isoSize += uint64(f.Size)
-		if isoSize < maxSize {
+		filesSize += uint64(f.Size)
+		if filesSize < maxSize {
 			continue
 		}
 
@@ -207,14 +207,17 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 			return 0, "", nil, err
 		}
 
-		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(isoSize)}
+		fileInfo, err := os.Stat(isoFilename)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(fileInfo.Size())}
 
 		hash, err := common.CalculateHash(isoFilename)
 		if err != nil {
 			return 0, "", nil, err
 		}
 		isoInfo.HashHex = common.CalculateHashHex(hash)
-		isoInfo.HashBase64 = common.CalculateHashBase64(hash)
 		// create db entry and update file info
 		start := time.Now()
 		_, count, err := db.CreateIsoWithFileIDs(isoInfo,
@@ -224,10 +227,10 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		}
 
 		logrus.Infof("Takes %s to update iso_id for %d files in DB", time.Since(start).Truncate(time.Second).String(), count)
-		return isoSize, isoFilename, files[idx+1:], err
+		return filesSize, isoFilename, files[idx+1:], err
 	}
 
-	return isoSize, isoFilename, nil, nil
+	return filesSize, isoFilename, nil, nil
 }
 
 func listISO(ctx *cli.Context) error {
@@ -240,7 +243,6 @@ func listISO(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(isos)
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
 	defer writer.Flush()
 

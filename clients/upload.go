@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
+	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -26,57 +28,29 @@ var (
 )
 
 const (
-	AWS   = 1
+	S3    = 1
 	Minio = 2
 )
 
 type UploadRequest struct {
-	ID     *string
-	Bucket *string
-	Key    *string
-}
-
-type CompletePart struct {
-	PartNo   int64
-	Etag     string
-	Checksum string
+	Time   time.Time
+	ID     string
+	Bucket string
+	Key    string
 }
 
 type UploadClient interface {
+	ListMultipartUploads(bucket string) ([]*UploadRequest, error)
+
 	CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error)
 	Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
 		checksum string) (string, error)
-	CompleteMultipartUpload(request *UploadRequest, parts []CompletePart, checksum string) error
+	CompleteMultipartUpload(request *UploadRequest, parts []*types.PartInfo, checksum string) error
 	AbortMultipartUpload(request *UploadRequest) error
 }
 
-type Upload struct {
-	client UploadClient
-}
-
-func NewUpload(keyID, key, region string, svc int) (*Upload, error) {
-	aclient, err := newAWSClient(keyID, key, region)
-	if err != nil {
-		return nil, err
-	}
-	return &Upload{client: aclient}, nil
-}
-
-func (up *Upload) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
-	return up.client.CreateMultipartUpload(bucket, remotePath, fileType)
-}
-
-func (up *Upload) Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
-	checksum string) (string, error) {
-	return up.client.Upload(partNo, length, request, reader, checksum)
-}
-
-func (up *Upload) CompleteMultipartUpload(request *UploadRequest, parts []CompletePart, checksum string) error {
-	return up.client.CompleteMultipartUpload(request, parts, checksum)
-}
-
-func (up *Upload) AbortMultipartUpload(request *UploadRequest) error {
-	return up.client.AbortMultipartUpload(request)
+func NewUpload(keyID, key, region string, svc int) (UploadClient, error) {
+	return newAWSClient(keyID, key, region)
 }
 
 type awsClient struct {
@@ -96,6 +70,25 @@ func newAWSClient(keyID, key, region string) (*awsClient, error) {
 		return nil, err
 	}
 	return &awsClient{region: region, svc: s3.New(sess, cfg)}, nil
+}
+
+func (ac *awsClient) ListMultipartUploads(bucket string) ([]*UploadRequest, error) {
+	output, err := ac.svc.ListMultipartUploads(&s3.ListMultipartUploadsInput{
+		Bucket: &bucket,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	requests := make([]*UploadRequest, len(output.Uploads))
+	for i, upload := range output.Uploads {
+		requests[i] = &UploadRequest{
+			Time: *upload.Initiated,
+			ID:   *upload.UploadId,
+			Key:  *upload.Key,
+		}
+	}
+	return requests, nil
 }
 
 func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
@@ -154,10 +147,19 @@ func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) 
 	}
 
 	common.LogDebugObject("CreateMultipartUploadReply", resp)
+	if resp.UploadId == nil {
+		return nil, errors.New("received empty upload ID")
+	}
+	if resp.Bucket == nil {
+		return nil, errors.New("received empty bucket")
+	}
+	if resp.Key == nil {
+		return nil, errors.New("received empty key")
+	}
 	return &UploadRequest{
-		ID:     resp.UploadId,
-		Bucket: resp.Bucket,
-		Key:    resp.Key,
+		ID:     *resp.UploadId,
+		Bucket: *resp.Bucket,
+		Key:    *resp.Key,
 	}, nil
 }
 
@@ -165,10 +167,10 @@ func (ac *awsClient) Upload(partNo, length int64, request *UploadRequest, reader
 	checksum string) (string, error) {
 	partInput := &s3.UploadPartInput{
 		Body:              reader,
-		Bucket:            request.Bucket,
-		Key:               request.Key,
+		Bucket:            &request.Bucket,
+		Key:               &request.Key,
 		PartNumber:        &partNo,
-		UploadId:          request.ID,
+		UploadId:          &request.ID,
 		ContentLength:     &length,
 		ChecksumAlgorithm: &checksumAlgorithm,
 		ChecksumSHA256:    &checksum,
@@ -178,7 +180,7 @@ func (ac *awsClient) Upload(partNo, length int64, request *UploadRequest, reader
 
 	var retErr error
 	for retry := 1; retry <= maxRetries; retry++ {
-		logrus.Infof("#%d retry uploading part %d for %s", retry, partNo, *request.Key)
+		logrus.Infof("#%d retry uploading part %d for %s", retry, partNo, request.Key)
 		uploadResult, err := ac.svc.UploadPart(partInput)
 		if err == nil {
 			if uploadResult.ETag == nil {
@@ -198,20 +200,20 @@ func (ac *awsClient) Upload(partNo, length int64, request *UploadRequest, reader
 	return "", retErr
 }
 
-func (ac *awsClient) CompleteMultipartUpload(request *UploadRequest, parts []CompletePart, checksum string) error {
+func (ac *awsClient) CompleteMultipartUpload(request *UploadRequest, parts []*types.PartInfo, checksum string) error {
 	completedParts := make([]*s3.CompletedPart, len(parts))
 	for i, p := range parts {
 		completedParts[i] = &s3.CompletedPart{
-			PartNumber:     aws.Int64(p.PartNo),
+			PartNumber:     aws.Int64(int64(p.PartNo)),
 			ETag:           aws.String(p.Etag),
-			ChecksumSHA256: aws.String(p.Checksum),
+			ChecksumSHA256: aws.String(p.HashBase64),
 		}
 	}
 
 	completeInput := &s3.CompleteMultipartUploadInput{
-		Bucket:         request.Bucket,
-		Key:            request.Key,
-		UploadId:       request.ID,
+		Bucket:         &request.Bucket,
+		Key:            &request.Key,
+		UploadId:       &request.ID,
 		ChecksumSHA256: &checksum,
 		MultipartUpload: &s3.CompletedMultipartUpload{
 			Parts: completedParts,
@@ -229,9 +231,9 @@ func (ac *awsClient) CompleteMultipartUpload(request *UploadRequest, parts []Com
 
 func (ac *awsClient) AbortMultipartUpload(request *UploadRequest) error {
 	abortInput := &s3.AbortMultipartUploadInput{
-		Bucket:   request.Bucket,
-		Key:      request.Key,
-		UploadId: request.ID,
+		Bucket:   &request.Bucket,
+		Key:      &request.Key,
+		UploadId: &request.ID,
 	}
 
 	common.LogDebugObject("AbortMultipartUpload", abortInput)

@@ -71,7 +71,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "iso-size,s",
 							Usage: "Size of each ISO file. KB=1000 Byte",
-							Value: "5GB",
+							Value: "5G",
 						},
 						cli.StringFlag{
 							Name:  "store-dir,p",
@@ -86,7 +86,7 @@ func main() {
 				},
 				{
 					Name:   "upload",
-					Action: uploadISO,
+					Action: uploadISOs,
 					Usage:  "Upload specified or all iso files",
 					Flags: []cli.Flag{
 						cli.StringFlag{
@@ -112,7 +112,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "part-size,p",
 							Usage: "Size of each upload partition. KB=1000 Byte",
-							Value: "200MB",
+							Value: "6M",
 						},
 						cli.IntFlag{
 							Name:  "nthreads,n",
@@ -139,7 +139,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "file-size,s",
 							Usage: "Minimum file size in the list result. KB=1000 Byte",
-							Value: "50MB",
+							Value: "50M",
 						},
 					},
 				},
@@ -151,6 +151,37 @@ func main() {
 						cli.BoolFlag{
 							Name:  "table-view, t",
 							Usage: "List all directories in table",
+						},
+					},
+				},
+				{
+					Name:   "backup",
+					Action: listBackups,
+					Usage:  "List all backup locally or remote",
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "local, l",
+							Usage: "List all uploads stored in local DB only",
+						},
+						cli.StringFlag{
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
+						},
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: "lomorage",
 						},
 					},
 				},

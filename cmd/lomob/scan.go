@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,7 +111,7 @@ func selectOrInsertDir(dir string, modTime *time.Time) (dirID int, err error) {
 		if info.modTime != nil || modTime == nil {
 			return info.id, nil
 		}
-		fmt.Printf("update dir %s: %v\n", dir, modTime)
+		//fmt.Printf("update dir %s: %v\n", dir, modTime)
 		err := db.UpdateDirModTime(info.id, *modTime)
 		if err != nil {
 			return 0, err
@@ -128,7 +127,7 @@ func selectOrInsertDir(dir string, modTime *time.Time) (dirID int, err error) {
 	if id != nil {
 		dirID = *id
 	} else {
-		fmt.Printf("insert dir %s: %v\n", dir, modTime)
+		//fmt.Printf("insert dir %s: %v\n", dir, modTime)
 		dirID, err = db.InsertDir(dir, scanRootDirID, modTime)
 		if err != nil {
 			return
@@ -169,7 +168,7 @@ func handleScan(path string, info os.FileInfo) error {
 	if info.IsDir() {
 		dir := strings.TrimPrefix(path, scanRootDir)
 		dir = strings.Trim(dir, string(filepath.Separator))
-		logrus.Infof("Start scan %s: %s", path, dir)
+		//logrus.Infof("Start scan %s: %s", path, dir)
 		t := info.ModTime()
 		_, err := selectOrInsertDir(dir, &t)
 		return err

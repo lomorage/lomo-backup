@@ -5,21 +5,39 @@ import "time"
 type IsoStatus int
 
 const (
-	Creating IsoStatus = iota
-	Created
-	Uploading
-	Uploaded
+	IsoCreating IsoStatus = iota
+	IsoCreated
+	IsoUploading
+	IsoUploaded
 )
 
 func (s IsoStatus) String() string {
 	switch s {
-	case Creating:
+	case IsoCreating:
 		return "Creating"
-	case Created:
+	case IsoCreated:
 		return "Created, not uploaded"
-	case Uploading:
+	case IsoUploading:
 		return "Uploadinging"
-	case Uploaded:
+	case IsoUploaded:
+		return "Uploaded"
+	}
+	return "Unknown"
+}
+
+type PartStatus int
+
+const (
+	PartUploading PartStatus = iota
+	PartUploaded
+	PartUploadFailed
+)
+
+func (p PartStatus) String() string {
+	switch p {
+	case PartUploading:
+		return "Uploadinging"
+	case PartUploaded:
 		return "Uploaded"
 	}
 	return "Unknown"
@@ -54,6 +72,8 @@ type ISOInfo struct {
 	Name       string
 	Region     string
 	Bucket     string
+	UploadKey  string
+	UploadID   string
 	HashHex    string
 	HashBase64 string
 	Size       int
@@ -66,10 +86,9 @@ type PartInfo struct {
 	IsoID      int
 	PartNo     int
 	Size       int
-	Bucket     string
+	Status     PartStatus
+	Etag       string
 	HashHex    string
 	HashBase64 string
-	UploadKey  string
-	UploadID   string
 	CreateTime time.Time
 }
