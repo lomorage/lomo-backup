@@ -119,6 +119,10 @@ func main() {
 							Usage: "Number of parallel multi part upload",
 							Value: 3,
 						},
+						cli.BoolFlag{
+							Name:  "save-parts,s",
+							Usage: "Save multiparts locally for debug",
+						},
 					},
 				},
 			},
@@ -156,6 +160,7 @@ func main() {
 
 	if err := app.Run(os.Args); err != nil {
 		logrus.Errorf(err.Error())
+		return
 	}
 }
 

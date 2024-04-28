@@ -54,7 +54,8 @@ type ISOInfo struct {
 	Name       string
 	Region     string
 	Bucket     string
-	Hash       string
+	HashHex    string
+	HashBase64 string
 	Size       int
 	Status     IsoStatus
 	CreateTime time.Time
@@ -66,7 +67,8 @@ type PartInfo struct {
 	PartNo     int
 	Size       int
 	Bucket     string
-	Hash       string
+	HashHex    string
+	HashBase64 string
 	UploadKey  string
 	UploadID   string
 	CreateTime time.Time

@@ -18,15 +18,15 @@ const (
 	getTotalFilesInIsoStmt       = "select sum(size), count(size) from files where iso_id=?"
 	updateIsoIDStmt              = "update files set iso_id=%d where id in (%s)"
 
-	getIsoByNameStmt = "select id, size, create_time from isos where name=?"
-	listIsosStmt     = "select id, name, size, status, region, bucket, hash, create_time from isos"
-	insertIsoStmt    = "insert into isos (name, size, status, hash, create_time) values (?, ?, ?, ?, ?)"
+	getIsoByNameStmt = "select id, size, hash_hex, hash_base64, create_time from isos where name=?"
+	listIsosStmt     = "select id, name, size, status, region, bucket, hash_hex, hash_bas64, create_time from isos"
+	insertIsoStmt    = "insert into isos (name, size, status, hash_hex, hash_base64, create_time) values (?, ?, ?, ?, ?, ?)"
 
 	updateIsoStatusStmt       = "update isos set status=? where iso_id=?"
 	updateIsoRegionBucketStmt = "update isos set status=?, region=?, bucket=? where iso_id=?"
 
-	insertPartStmt = "insert into parts (iso_id, part_no, bucket, hash, size, uploaded_size, upload_key, upload_id," +
-		"create_time) values (?, ?, ?, ?, ?, 0, ?, ?, ?)"
+	insertPartStmt = "insert into parts (iso_id, part_no, bucket, hash_hex, hash_base64, size, uploaded_size, upload_key, upload_id," +
+		"create_time) values (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
 	getPartsByIsoIDStmt = "select part_no, bucket, hash, size, uploaded_size, upload_key, upload_id, create_time " +
 		"from parts where iso_id=?"
 	deletePartsByIsoIDStmt   = "delete from parts where iso_id=?"
@@ -83,7 +83,8 @@ func (db *DB) GetIsoByName(name string) (*types.ISOInfo, error) {
 	iso := &types.ISOInfo{Name: name}
 	err := db.retryIfLocked("list ISOs",
 		func(tx *sql.Tx) error {
-			err := tx.QueryRow(getIsoByNameStmt, name).Scan(&iso.ID, &iso.Size, &iso.CreateTime)
+			err := tx.QueryRow(getIsoByNameStmt, name).Scan(&iso.ID, &iso.Size, &iso.HashHex,
+				&iso.HashBase64, &iso.CreateTime)
 			return err
 		},
 	)
@@ -107,7 +108,7 @@ func (db *DB) ListISOs() ([]*types.ISOInfo, error) {
 			for rows.Next() {
 				iso := &types.ISOInfo{}
 				err = rows.Scan(&iso.ID, &iso.Name, &iso.Size, &iso.Status, &iso.Region, &iso.Bucket,
-					&iso.Hash, &iso.CreateTime)
+					&iso.HashHex, &iso.HashBase64, &iso.CreateTime)
 				if err != nil {
 					return err
 				}
@@ -123,7 +124,8 @@ func (db *DB) InsertISO(iso *types.ISOInfo) (int, error) {
 	var id int64
 	err := db.retryIfLocked(fmt.Sprintf("insert iso %s", iso.Name),
 		func(tx *sql.Tx) error {
-			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, time.Now().UTC())
+			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, iso.HashHex, iso.HashBase64,
+				time.Now().UTC())
 			if err != nil {
 				return err
 			}
@@ -138,7 +140,8 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 	var isoID, updatedFiles int64
 	err := db.retryIfLocked(fmt.Sprintf("insert iso %s", iso.Name),
 		func(tx *sql.Tx) error {
-			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, types.Created, iso.Hash, time.Now().UTC())
+			res, err := tx.Exec(insertIsoStmt, iso.Name, iso.Size, types.Created, iso.HashHex,
+				iso.HashBase64, time.Now().UTC())
 			if err != nil {
 				return err
 			}
@@ -163,8 +166,8 @@ func (db *DB) InsertIsoParts(isoID int, parts []*types.PartInfo) error {
 	return db.retryIfLocked(fmt.Sprintf("insert iso %d parts", isoID),
 		func(tx *sql.Tx) error {
 			for _, p := range parts {
-				_, err := tx.Exec(insertPartStmt, isoID, p.PartNo, p.Bucket, p.Hash, p.Size,
-					p.UploadKey, p.UploadID, createTime)
+				_, err := tx.Exec(insertPartStmt, isoID, p.PartNo, p.Bucket, p.HashHex,
+					p.HashBase64, p.Size, p.UploadKey, p.UploadID, createTime)
 				if err != nil {
 					return err
 				}
@@ -183,7 +186,7 @@ func (db *DB) GetPartsByIsoID(isoID int) (parts []*types.PartInfo, err error) {
 			}
 			for rows.Next() {
 				p := &types.PartInfo{IsoID: isoID}
-				err = rows.Scan(&p.PartNo, &p.Bucket, &p.Hash, &p.Size,
+				err = rows.Scan(&p.PartNo, &p.Bucket, &p.HashHex, &p.HashBase64, &p.Size,
 					&p.UploadKey, &p.UploadID, &p.CreateTime)
 				if err != nil {
 					return err

@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS isos (
   bucket VARCHAR VARCHAR DEFAULT "" NOT NULL,
   size INTEGER,
   status INTEGER,
-  hash VARCHAR,
+  hash_hex VARCHAR,
+  hash_base64 VARCHAR,
   create_time TIMESTAMP NOT NULL
 );
 
@@ -38,7 +39,8 @@ CREATE TABLE IF NOT EXISTS parts (
   part_no INTEGER NOT NULL,
   region VARCHAR DEFAULT "" NOT NULL,
   bucket VARCHAR DEFAULT "" NOT NULL,
-  hash VARCHAT NOT NULL,
+  hash_hex VARCHAR NOT NULL,
+  hash_base64 VARCHAR NOT NULL,
   size INTEGER,
   uploaded_size INTEGER,
   upload_key VARCHAR NOT NULL,

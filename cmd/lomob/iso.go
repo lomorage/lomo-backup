@@ -209,10 +209,12 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 
 		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(isoSize)}
 
-		isoInfo.Hash, err = common.CalculateHash(isoFilename)
+		hash, err := common.CalculateHash(isoFilename)
 		if err != nil {
 			return 0, "", nil, err
 		}
+		isoInfo.HashHex = common.CalculateHashHex(hash)
+		isoInfo.HashBase64 = common.CalculateHashBase64(hash)
 		// create db entry and update file info
 		start := time.Now()
 		_, count, err := db.CreateIsoWithFileIDs(isoInfo,
@@ -250,7 +252,7 @@ func listISO(ctx *cli.Context) error {
 		}
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", iso.ID, iso.Name,
 			datasize.ByteSize(iso.Size).HR(), iso.Status, iso.Region, iso.Bucket, count,
-			common.FormatTime(iso.CreateTime.Truncate(time.Second).Local()), iso.Hash)
+			common.FormatTime(iso.CreateTime.Truncate(time.Second).Local()), iso.HashBase64)
 	}
 	return nil
 }
