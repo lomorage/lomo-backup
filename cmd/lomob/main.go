@@ -155,9 +155,38 @@ func main() {
 					},
 				},
 				{
-					Name:   "backup",
-					Action: listBackups,
-					Usage:  "List all backup locally or remote",
+					Name:      "parts",
+					Action:    calculatePartHash,
+					Usage:     "Calculate given files base64 hash",
+					ArgsUsage: "[filename]",
+				},
+			},
+		},
+		{
+			Name:  "util",
+			Usage: "Various tools",
+			Subcommands: cli.Commands{
+				{
+					Name:      "parts",
+					Action:    calculatePartHash,
+					Usage:     "Calculate given files base64 hash",
+					ArgsUsage: "[filename]",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "part-size,p",
+							Usage: "Size of each upload partition. KB=1000 Byte",
+							Value: "6M",
+						},
+						cli.IntFlag{
+							Name:  "part-number,pn",
+							Usage: "The number of part to calculate",
+						},
+					},
+				},
+				{
+					Name:   "list-inprogress-upload",
+					Action: listUploadingItems,
+					Usage:  "List uploading tasks in AWS",
 					Flags: []cli.Flag{
 						cli.BoolFlag{
 							Name:  "local, l",
@@ -186,31 +215,30 @@ func main() {
 					},
 				},
 				{
-					Name:      "parts",
-					Action:    calculatePartHash,
-					Usage:     "Calculate given files base64 hash",
-					ArgsUsage: "[filename]",
-				},
-			},
-		},
-		{
-			Name:  "util",
-			Usage: "Various tools",
-			Subcommands: cli.Commands{
-				{
-					Name:      "parts",
-					Action:    calculatePartHash,
-					Usage:     "Calculate given files base64 hash",
-					ArgsUsage: "[filename]",
+					Name:      "abort-upload",
+					Action:    abortUpload,
+					Usage:     "Abort in progress upload",
+					ArgsUsage: "[upload key] [upload ID]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
-							Name:  "part-size,p",
-							Usage: "Size of each upload partition. KB=1000 Byte",
-							Value: "6M",
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
 						},
-						cli.IntFlag{
-							Name:  "part-number,pn",
-							Usage: "The number of part to calculate",
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: "lomorage",
 						},
 					},
 				},

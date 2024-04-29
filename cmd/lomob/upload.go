@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/lomorage/lomo-backup/clients"
@@ -112,6 +113,27 @@ func prepareUploadRequest(accessKeyID, accessKey, region, bucket string,
 		return nil, nil, err
 	}
 
+	isoFilename := filepath.Base(isoInfo.Name)
+	remoteInfo, err := cli.GetObject(bucket, isoFilename)
+	if err != nil {
+		return nil, nil, err
+	}
+	if remoteInfo != nil {
+		if remoteInfo.Size != isoInfo.Size {
+			return nil, nil, errors.Errorf("%s exists in cloud and its size is %d, but provided file size is %d",
+				isoFilename, remoteInfo.Size, isoInfo.Size)
+		}
+		remoteHash := strings.Split(remoteInfo.HashBase64, "-")[0]
+		if remoteHash != isoInfo.HashBase64 {
+			return nil, nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
+				isoFilename, remoteHash, isoInfo.HashBase64)
+		}
+		// no need upload, return nil upload request
+		return cli, nil, nil
+	}
+
+	// not exist, upload now
+
 	if isoInfo.Region == region && isoInfo.Bucket == bucket && isoInfo.UploadID != "" &&
 		isoInfo.UploadKey != "" {
 		return cli, &clients.UploadRequest{
@@ -121,7 +143,7 @@ func prepareUploadRequest(accessKeyID, accessKey, region, bucket string,
 		}, nil
 	}
 
-	request, err := cli.CreateMultipartUpload(bucket, filepath.Base(isoInfo.Name), isoContentType)
+	request, err := cli.CreateMultipartUpload(bucket, isoFilename, isoContentType)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -145,6 +167,11 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	cli, request, err := prepareUploadRequest(accessKeyID, accessKey, region, bucket, isoInfo)
 	if err != nil {
 		return err
+	}
+	if request == nil {
+		fmt.Printf("%s is already in region %s, bucket %s, no need upload again !\n",
+			isoFilename, region, bucket)
+		return nil
 	}
 
 	var start, end int64
@@ -253,7 +280,7 @@ func uploadISOs(ctx *cli.Context) error {
 	return nil
 }
 
-func listBackups(ctx *cli.Context) error {
+func listUploadingItems(ctx *cli.Context) error {
 	accessKeyID := ctx.String("awsAccessKeyID")
 	secretAccessKey := ctx.String("awsSecretAccessKey")
 	region := ctx.String("awsBucketRegion")
@@ -272,11 +299,34 @@ func listBackups(ctx *cli.Context) error {
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
 	defer writer.Flush()
 
-	fmt.Fprint(writer, "Key\tUploadID\tUploadTime\n")
+	fmt.Fprint(writer, "UploadKey\tUploadID\tUploadTime\n")
 	for _, r := range requests {
 		fmt.Fprintf(writer, "%s\t%s\t%s\n", r.Key, r.ID,
 			common.FormatTime(r.Time.Local()))
 	}
+	return nil
+}
+
+func abortUpload(ctx *cli.Context) error {
+	accessKeyID := ctx.String("awsAccessKeyID")
+	secretAccessKey := ctx.String("awsSecretAccessKey")
+	region := ctx.String("awsBucketRegion")
+	bucket := ctx.String("awsBucketName")
+
+	cli, err := clients.NewUpload(accessKeyID, secretAccessKey, region, clients.S3)
+	if err != nil {
+		return err
+	}
+
+	err = cli.AbortMultipartUpload(&clients.UploadRequest{
+		Key:    ctx.Args()[0],
+		ID:     ctx.Args()[1],
+		Bucket: bucket,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println("abort upload success")
 	return nil
 }
 

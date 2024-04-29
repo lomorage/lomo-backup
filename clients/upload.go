@@ -1,8 +1,6 @@
 package clients
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 	"time"
 
@@ -12,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/lomorage/lomo-backup/common"
-	"github.com/lomorage/lomo-backup/common/datasize"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -42,6 +39,7 @@ type UploadRequest struct {
 type UploadClient interface {
 	ListMultipartUploads(bucket string) ([]*UploadRequest, error)
 
+	GetObject(bucket, remotePath string) (*types.ISOInfo, error)
 	CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error)
 	Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
 		checksum string) (string, error)
@@ -91,6 +89,29 @@ func (ac *awsClient) ListMultipartUploads(bucket string) ([]*UploadRequest, erro
 	return requests, nil
 }
 
+func (ac *awsClient) GetObject(bucket, remotePath string) (*types.ISOInfo, error) {
+	object, err := ac.svc.HeadObject(&s3.HeadObjectInput{
+		Bucket:       &bucket,
+		Key:          &remotePath,
+		ChecksumMode: aws.String(s3.ChecksumModeEnabled),
+	})
+	if err == nil {
+		info := &types.ISOInfo{}
+		if object.ContentLength != nil {
+			info.Size = int(*object.ContentLength)
+		}
+		if object.ChecksumSHA256 != nil {
+			info.HashBase64 = *object.ChecksumSHA256
+		}
+		common.LogDebugObject("HeadObjectReply", info)
+		return info, nil
+	} else if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+		return nil, nil
+	} else {
+		return nil, err
+	}
+}
+
 func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
 	// create bucket if not exist
 	_, err := ac.svc.HeadBucket(&s3.HeadBucketInput{Bucket: &bucket})
@@ -107,31 +128,6 @@ func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) 
 		logrus.Infof("Bucket %s is created in %s", bucket, ac.region)
 	} else {
 		logrus.Infof("Bucket %s exists in %s", bucket, ac.region)
-	}
-
-	object, err := ac.svc.HeadObject(&s3.HeadObjectInput{
-		Bucket:       &bucket,
-		Key:          &remotePath,
-		ChecksumMode: aws.String(s3.ChecksumModeEnabled),
-	})
-	if err == nil {
-		errString := fmt.Sprintf("%s exists in region %s, bucket %s.",
-			remotePath, ac.region, bucket)
-		if object.ContentLength != nil {
-			errString += " Its size is " + datasize.ByteSize(*object.ContentLength).HR() + "."
-		}
-		content, _ := json.MarshalIndent(object, "", "  ")
-		logrus.Debugf("%s at region %s, bucket %s head object: %s",
-			remotePath, ac.region, bucket, string(content))
-		if object.ChecksumSHA256 != nil {
-			errString += " Its base64 encoded sha256 value is " + *object.ChecksumSHA256 + "."
-		}
-		return nil, errors.Errorf(errString)
-	} else if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
-		logrus.Infof("%s does't exist in region %s, bucket %s, multipart uploading",
-			remotePath, ac.region, bucket)
-	} else {
-		return nil, err
 	}
 
 	input := &s3.CreateMultipartUploadInput{
