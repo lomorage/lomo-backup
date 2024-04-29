@@ -185,6 +185,35 @@ func main() {
 						},
 					},
 				},
+				{
+					Name:      "parts",
+					Action:    calculatePartHash,
+					Usage:     "Calculate given files base64 hash",
+					ArgsUsage: "[filename]",
+				},
+			},
+		},
+		{
+			Name:  "util",
+			Usage: "Various tools",
+			Subcommands: cli.Commands{
+				{
+					Name:      "parts",
+					Action:    calculatePartHash,
+					Usage:     "Calculate given files base64 hash",
+					ArgsUsage: "[filename]",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "part-size,p",
+							Usage: "Size of each upload partition. KB=1000 Byte",
+							Value: "6M",
+						},
+						cli.IntFlag{
+							Name:  "part-number,pn",
+							Usage: "The number of part to calculate",
+						},
+					},
+				},
 			},
 		},
 	}

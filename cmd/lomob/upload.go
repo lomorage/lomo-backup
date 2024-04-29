@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -55,7 +57,7 @@ func validateISO(isoFilename, metaFilename string) (*os.File, *types.ISOInfo, er
 	return f, iso, nil
 }
 
-func prepareUpload(isoFilename string, partSize int) (*os.File, *types.ISOInfo, []*types.PartInfo, error) {
+func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOInfo, []*types.PartInfo, error) {
 	isoFile, isoInfo, err := validateISO(isoFilename, mkIsoMetadataFilename(isoFilename))
 	if err != nil {
 		return nil, nil, nil, err
@@ -89,6 +91,7 @@ func prepareUpload(isoFilename string, partSize int) (*os.File, *types.ISOInfo, 
 			HashHex:    common.CalculateHashHex(p),
 			HashBase64: common.CalculateHashBase64(p),
 		}
+		remaining -= partLength
 	}
 
 	err = db.InsertIsoParts(isoInfo.ID, parts)
@@ -102,21 +105,25 @@ func prepareUpload(isoFilename string, partSize int) (*os.File, *types.ISOInfo, 
 	return isoFile, isoInfo, parts, db.UpdateIsoBase64Hash(isoInfo.ID, isoInfo.HashBase64)
 }
 
-func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
-	partSize int, saveParts bool) error {
-	isoFile, isoInfo, parts, err := prepareUpload(isoFilename, partSize)
-	if err != nil {
-		return err
-	}
-
+func prepareUploadRequest(accessKeyID, accessKey, region, bucket string,
+	isoInfo *types.ISOInfo) (clients.UploadClient, *clients.UploadRequest, error) {
 	cli, err := clients.NewUpload(accessKeyID, accessKey, region, clients.S3)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	request, err := cli.CreateMultipartUpload(bucket, filepath.Base(isoFilename), isoContentType)
+	if isoInfo.Region == region && isoInfo.Bucket == bucket && isoInfo.UploadID != "" &&
+		isoInfo.UploadKey != "" {
+		return cli, &clients.UploadRequest{
+			ID:     isoInfo.UploadID,
+			Bucket: bucket,
+			Key:    isoInfo.UploadKey,
+		}, nil
+	}
+
+	request, err := cli.CreateMultipartUpload(bucket, filepath.Base(isoInfo.Name), isoContentType)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	isoInfo.Region = region
@@ -124,23 +131,39 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	isoInfo.UploadKey = request.Key
 	isoInfo.UploadID = request.ID
 
-	err = db.UpdateIsoUploadInfo(isoInfo)
+	return cli, request, db.UpdateIsoUploadInfo(isoInfo)
+}
+
+func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
+	partSize int, saveParts bool) error {
+	isoFile, isoInfo, parts, err := prepareUploadParts(isoFilename, partSize)
+	if err != nil {
+		return err
+	}
+	defer isoFile.Close()
+
+	cli, request, err := prepareUploadRequest(accessKeyID, accessKey, region, bucket, isoInfo)
 	if err != nil {
 		return err
 	}
 
 	var start, end int64
+	var failParts []int
 	for i, p := range parts {
-		if p.Status == types.PartUploaded {
-			logrus.Infof("%s's part %d was uploaded successfully, skip new upload", isoFilename, p.PartNo)
-			continue
-		}
 		if i == 0 {
 			end = int64(p.Size)
 		} else {
 			start = end
 			end += int64(p.Size)
 		}
+
+		if p.Status == types.PartUploaded {
+			logrus.Infof("%s's part %d was uploaded successfully, skip new upload", isoFilename, p.PartNo)
+			continue
+		}
+
+		logrus.Infof("Uploading %s's part %d [%d, %d]", isoFilename, p.PartNo, start, end)
+
 		var readSeeker io.ReadSeeker
 		prs := common.NewFilePartReadSeeker(isoFile, start, end)
 		if saveParts {
@@ -160,6 +183,7 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 
 		p.Etag, err = cli.Upload(int64(p.PartNo), int64(p.Size), request, readSeeker, p.HashBase64)
 		if err != nil {
+			failParts = append(failParts, p.PartNo)
 			logrus.Infof("Upload %s's part number %d:%s", isoFilename, p.PartNo, err)
 			err = db.UpdatePartStatus(p.IsoID, p.PartNo, types.PartUploadFailed)
 			if err != nil {
@@ -173,19 +197,21 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 			logrus.Infof("Update %s's part number %d status %s:%s", isoFilename, p.PartNo,
 				types.PartUploaded, err)
 		}
+		logrus.Infof("Uploading %s's part %d is done!", isoFilename, p.PartNo)
 	}
 
-	// make it fail
-	isoInfo.HashBase64 = ""
+	if len(failParts) != 0 {
+		return errors.Errorf("Parts %v failed to upload", failParts)
+	}
 	err = cli.CompleteMultipartUpload(request, parts, isoInfo.HashBase64)
-	if err == nil {
+	if err != nil {
 		logrus.Warnf("Upload %s fail: %s", isoFilename, err)
-	} else {
-		fmt.Printf("%s is uploaded to region %s, bucket %s successfully!\n",
-			isoFilename, region, bucket)
+		return err
 	}
+	fmt.Printf("%s is uploaded to region %s, bucket %s successfully!\n",
+		isoFilename, region, bucket)
 
-	return err
+	return db.UpdateIsoStatus(isoInfo.ID, types.IsoUploaded)
 }
 
 func uploadISOs(ctx *cli.Context) error {
@@ -251,5 +277,75 @@ func listBackups(ctx *cli.Context) error {
 		fmt.Fprintf(writer, "%s\t%s\t%s\n", r.Key, r.ID,
 			common.FormatTime(r.Time.Local()))
 	}
+	return nil
+}
+
+func calculatePartHash(ctx *cli.Context) error {
+	partSize, err := datasize.ParseString(ctx.String("part-size"))
+	if err != nil {
+		return err
+	}
+	filename := ctx.Args()[0]
+	partNumber := ctx.Int("part-number")
+	if partNumber == 0 {
+		parts, err := common.CalculateMultiPartsHash(filename, int(partSize))
+		if err != nil {
+			return err
+		}
+		for i, p := range parts {
+			fmt.Printf("Part %d: %s\n", i+1, common.CalculateHashBase64(p))
+		}
+
+		overall, err := common.ConcatAndCalculateBase64Hash(parts)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Overall: %s\n", overall)
+		return nil
+	}
+
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	info, err := os.Stat(filename)
+	if err != nil {
+		return err
+	}
+
+	var curr, partLength int64
+	var remaining = int64(info.Size())
+	var no = 1
+	var prs *common.FilePartReadSeeker
+	var h hash.Hash
+	for curr = 0; remaining != 0; curr += partLength {
+		if remaining < int64(partSize) {
+			partLength = remaining
+		} else {
+			partLength = int64(partSize)
+		}
+
+		if partNumber != no {
+			goto next
+		}
+
+		fmt.Printf("Calculating base64 hash from %d to %d and remaining %d\n",
+			curr, curr+partLength, remaining)
+		prs = common.NewFilePartReadSeeker(f, curr, curr+partLength)
+		h = sha256.New()
+		_, err = io.Copy(h, prs)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Part %d: %s\n", partNumber, common.CalculateHashBase64(h.Sum(nil)))
+		return nil
+	next:
+		no++
+		remaining -= partLength
+	}
+
 	return nil
 }
