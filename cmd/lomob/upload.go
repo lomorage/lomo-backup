@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"hash"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -20,13 +22,16 @@ import (
 	"github.com/urfave/cli"
 )
 
-const isoContentType = "application/octet-stream"
+const (
+	isoContentType  = "application/octet-stream"
+	metaContentType = "text/plain"
+)
 
 func mkIsoMetadataFilename(isoFilename string) string {
 	return isoFilename + ".meta.txt"
 }
 
-func validateISO(isoFilename, metaFilename string) (*os.File, *types.ISOInfo, error) {
+func validateISO(isoFilename string) (*os.File, *types.ISOInfo, error) {
 	f, err := os.Open(isoFilename)
 	if err != nil {
 		return nil, nil, err
@@ -53,13 +58,11 @@ func validateISO(isoFilename, metaFilename string) (*os.File, *types.ISOInfo, er
 	if hashHex != iso.HashHex {
 		return nil, nil, errors.Errorf("Hash in DB is %s, but got %s", iso.HashHex, hash)
 	}
-
-	// TODO: create meta file if it is zero or not exist
 	return f, iso, nil
 }
 
 func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOInfo, []*types.PartInfo, error) {
-	isoFile, isoInfo, err := validateISO(isoFilename, mkIsoMetadataFilename(isoFilename))
+	isoFile, isoInfo, err := validateISO(isoFilename)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -106,46 +109,41 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	return isoFile, isoInfo, parts, db.UpdateIsoBase64Hash(isoInfo.ID, isoInfo.HashBase64)
 }
 
-func prepareUploadRequest(accessKeyID, accessKey, region, bucket string,
-	isoInfo *types.ISOInfo) (clients.UploadClient, *clients.UploadRequest, error) {
-	cli, err := clients.NewUpload(accessKeyID, accessKey, region, clients.S3)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func prepareUploadRequest(cli clients.UploadClient, region, bucket string,
+	isoInfo *types.ISOInfo) (*clients.UploadRequest, error) {
 	isoFilename := filepath.Base(isoInfo.Name)
 	remoteInfo, err := cli.GetObject(bucket, isoFilename)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if remoteInfo != nil {
 		if remoteInfo.Size != isoInfo.Size {
-			return nil, nil, errors.Errorf("%s exists in cloud and its size is %d, but provided file size is %d",
+			return nil, errors.Errorf("%s exists in cloud and its size is %d, but provided file size is %d",
 				isoFilename, remoteInfo.Size, isoInfo.Size)
 		}
 		remoteHash := strings.Split(remoteInfo.HashBase64, "-")[0]
 		if remoteHash != isoInfo.HashBase64 {
-			return nil, nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
+			return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
 				isoFilename, remoteHash, isoInfo.HashBase64)
 		}
 		// no need upload, return nil upload request
-		return cli, nil, nil
+		return nil, nil
 	}
 
-	// not exist, upload now
-
+	// not exist but previous upload not finish, so reuse previous upload
 	if isoInfo.Region == region && isoInfo.Bucket == bucket && isoInfo.UploadID != "" &&
 		isoInfo.UploadKey != "" {
-		return cli, &clients.UploadRequest{
+		return &clients.UploadRequest{
 			ID:     isoInfo.UploadID,
 			Bucket: bucket,
 			Key:    isoInfo.UploadKey,
 		}, nil
 	}
 
+	// create new upload
 	request, err := cli.CreateMultipartUpload(bucket, isoFilename, isoContentType)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	isoInfo.Region = region
@@ -153,18 +151,116 @@ func prepareUploadRequest(accessKeyID, accessKey, region, bucket string,
 	isoInfo.UploadKey = request.Key
 	isoInfo.UploadID = request.ID
 
-	return cli, request, db.UpdateIsoUploadInfo(isoInfo)
+	return request, db.UpdateIsoUploadInfo(isoInfo)
+}
+
+func validateISOMetafile(metaFilename string, tree []byte) error {
+	meta, err := os.Open(metaFilename)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		// create the file now
+		return os.WriteFile(metaFilename, tree, 0644)
+	}
+	defer meta.Close()
+
+	info, err := meta.Stat()
+	if err != nil {
+		return err
+	}
+
+	if info.Size() != int64(len(tree)) {
+		// recreate the metafile
+		logrus.Warnf("Existing meta file %s's size is %d while expecting %d. Recreating",
+			metaFilename, info.Size(), len(tree))
+		return os.WriteFile(metaFilename, tree, 0644)
+	}
+
+	content, err := io.ReadAll(meta)
+	if err != nil {
+		return err
+	}
+	if reflect.DeepEqual(content, tree) {
+		return nil
+	}
+	logrus.Warnf("Existing meta file %s has different content. Recreating", metaFilename)
+
+	return os.WriteFile(metaFilename, tree, 0644)
+}
+
+func uploadISOMetafile(cli clients.UploadClient, bucket, isoFilename string) error {
+	// TODO: create meta file if it is zero or not exist
+	tree, err := genTreeInIso(isoFilename)
+	if err != nil {
+		return err
+	}
+
+	treeBuf := []byte(tree)
+
+	metaFilename := mkIsoMetadataFilename(isoFilename)
+	err = validateISOMetafile(metaFilename, treeBuf)
+	if err != nil {
+		return nil
+	}
+
+	hashBase64 := common.CalculateHashBase64(common.CalculateHashBytes(treeBuf))
+
+	remoteInfo, err := cli.GetObject(bucket, metaFilename)
+	if err != nil {
+		return err
+	}
+	if remoteInfo != nil {
+		recreate := false
+		if remoteInfo.Size != len(treeBuf) {
+			logrus.Warnf("%s exists in cloud and its size is %d, but provided file size is %d",
+				metaFilename, remoteInfo.Size, len(treeBuf))
+			recreate = true
+		}
+		if remoteInfo.HashBase64 != hashBase64 {
+			logrus.Warnf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
+				metaFilename, remoteInfo.HashBase64, hashBase64)
+			recreate = true
+		}
+		// no need upload, return nil upload request
+		if !recreate {
+			fmt.Printf("%s is already in bucket %s, no need upload again !\n",
+				metaFilename, bucket)
+			return nil
+		}
+	}
+
+	fmt.Printf("Uploading metadata file %s\n", metaFilename)
+	err = cli.PutObject(bucket, filepath.Base(metaFilename), hashBase64, metaContentType,
+		bytes.NewReader(treeBuf))
+	if err != nil {
+		fmt.Printf("Uploading metadata file %s fail: %s\n", metaFilename, err)
+	} else {
+		fmt.Printf("Upload metadata file %s success!\n", metaFilename)
+	}
+	return err
 }
 
 func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	partSize int, saveParts bool) error {
+	cli, err := clients.NewUpload(accessKeyID, accessKey, region, clients.S3)
+	if err != nil {
+		return err
+	}
+
+	// check metadata file firstly
+	err = uploadISOMetafile(cli, bucket, isoFilename)
+	if err != nil {
+		return err
+	}
+
 	isoFile, isoInfo, parts, err := prepareUploadParts(isoFilename, partSize)
 	if err != nil {
 		return err
 	}
 	defer isoFile.Close()
 
-	cli, request, err := prepareUploadRequest(accessKeyID, accessKey, region, bucket, isoInfo)
+	request, err := prepareUploadRequest(cli, region, bucket, isoInfo)
 	if err != nil {
 		return err
 	}

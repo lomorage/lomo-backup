@@ -124,12 +124,12 @@ func printDirsByTree(dirs map[int]*types.DirInfo) {
 		}
 		// TODO: pretty output with meta value
 		if d.NumberOfDirs > 0 {
-			//newNode := parentNode.AddMetaBranch("\t\t"+common.FormatTimeDateOnly(d.ModTime), name)
-			newNode := parentNode.AddBranch(name)
+			newNode := parentNode.AddMetaBranch(
+				fmt.Sprintf("%15s", common.FormatTimeDateOnly(d.ModTime)), name)
 			nodes[d.Path] = newNode
 		} else {
-			//parentNode.AddMetaNode(common.FormatTimeDateOnly(d.ModTime), name)
-			parentNode.AddNode(name)
+			parentNode.AddMetaNode(
+				fmt.Sprintf("%15s", common.FormatTimeDateOnly(d.ModTime)), name)
 		}
 	}
 

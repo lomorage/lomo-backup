@@ -12,6 +12,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/djherbis/times"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
@@ -19,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"github.com/xlab/treeprint"
 )
 
 var futuretime = time.Date(3000, time.December, 31, 0, 0, 0, 0, time.Now().UTC().Location())
@@ -255,6 +258,64 @@ func listISO(ctx *cli.Context) error {
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", iso.ID, iso.Name,
 			datasize.ByteSize(iso.Size).HR(), iso.Status, iso.Region, iso.Bucket, count,
 			common.FormatTime(iso.CreateTime.Local()), iso.HashBase64)
+	}
+	return nil
+}
+
+func dumpISO(ctx *cli.Context) error {
+	if len(ctx.Args()) == 0 {
+		return errors.New("please provide one iso filename")
+	}
+
+	tree, err := genTreeInIso(ctx.Args()[0])
+	if err != nil {
+		return err
+	}
+	fmt.Println(tree)
+	return nil
+}
+
+func genTreeInIso(isoFilename string) (string, error) {
+	const root = "/"
+	rootNode := treeprint.NewWithRoot(root)
+
+	disk, err := diskfs.Open(isoFilename)
+	if err != nil {
+		return "", err
+	}
+	fs, err := disk.GetFilesystem(0)
+	if err != nil {
+		return "", err
+	}
+
+	err = fileInfoFor(root, fs, rootNode)
+	if err != nil {
+		return "", err
+	}
+
+	return rootNode.String(), nil
+}
+
+func fileInfoFor(path string, fs filesystem.FileSystem, currNode treeprint.Tree) error {
+	files, err := fs.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		t := file.ModTime()
+		fullPath := filepath.Join(path, file.Name())
+		if file.IsDir() {
+			childNode := currNode.AddMetaBranch(
+				fmt.Sprintf("\t%02d/%02d/%d", t.Month(), t.Day(), t.Year()), file.Name())
+			err = fileInfoFor(fullPath, fs, childNode)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		currNode.AddMetaNode(fmt.Sprintf("\t%12s\t%02d/%02d/%d", strconv.Itoa(int(file.Size())),
+			t.Month(), t.Day(), t.Year()), file.Name())
 	}
 	return nil
 }

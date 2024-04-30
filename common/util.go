@@ -188,6 +188,12 @@ func CalculateHashBase64(hash []byte) string {
 	return base64.StdEncoding.EncodeToString(hash)
 }
 
+func CalculateHashBytes(buffer []byte) []byte {
+	h := sha256.New()
+	h.Write(buffer)
+	return h.Sum(nil)
+}
+
 func CalculateHash(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {

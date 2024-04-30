@@ -85,6 +85,12 @@ func main() {
 					Usage:  "List all created iso files",
 				},
 				{
+					Name:      "dump",
+					Action:    dumpISO,
+					Usage:     "Dump and print all files/directories in given ISO in tree",
+					ArgsUsage: "[iso filename]",
+				},
+				{
 					Name:   "upload",
 					Action: uploadISOs,
 					Usage:  "Upload specified or all iso files",

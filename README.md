@@ -38,7 +38,6 @@ Workflow:
 
 Pre-requsition commands:
 - mkisofs: generate iso file
-- mount / umount: validate ISO and print all files
 
 Features:
 

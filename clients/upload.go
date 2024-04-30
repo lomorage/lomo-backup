@@ -37,13 +37,13 @@ type UploadRequest struct {
 }
 
 type UploadClient interface {
-	ListMultipartUploads(bucket string) ([]*UploadRequest, error)
-
 	GetObject(bucket, remotePath string) (*types.ISOInfo, error)
+	PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error
 	CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error)
 	Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
 		checksum string) (string, error)
 	CompleteMultipartUpload(request *UploadRequest, parts []*types.PartInfo, checksum string) error
+	ListMultipartUploads(bucket string) ([]*UploadRequest, error)
 	AbortMultipartUpload(request *UploadRequest) error
 }
 
@@ -112,22 +112,47 @@ func (ac *awsClient) GetObject(bucket, remotePath string) (*types.ISOInfo, error
 	}
 }
 
-func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
+func (ac *awsClient) createBucketIfNotExist(bucket string) error {
 	// create bucket if not exist
 	_, err := ac.svc.HeadBucket(&s3.HeadBucketInput{Bucket: &bucket})
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
-			return nil, err
-		}
-		logrus.Infof("Bucket %s does't exist in %s, creating", bucket, ac.region)
-
-		_, err = ac.svc.CreateBucket(&s3.CreateBucketInput{Bucket: &bucket})
-		if err != nil {
-			return nil, err
-		}
-		logrus.Infof("Bucket %s is created in %s", bucket, ac.region)
-	} else {
+	if err == nil {
 		logrus.Infof("Bucket %s exists in %s", bucket, ac.region)
+		return nil
+	}
+	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
+		return err
+	}
+	logrus.Infof("Bucket %s does't exist in %s, creating", bucket, ac.region)
+
+	_, err = ac.svc.CreateBucket(&s3.CreateBucketInput{Bucket: &bucket})
+	if err != nil {
+		return err
+	}
+	logrus.Infof("Bucket %s is created in %s", bucket, ac.region)
+	return nil
+}
+
+func (ac *awsClient) PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error {
+	err := ac.createBucketIfNotExist(bucket)
+	if err != nil {
+		return err
+	}
+	input := &s3.PutObjectInput{
+		Body:              reader,
+		Bucket:            aws.String(bucket),
+		Key:               aws.String(remotePath),
+		ContentType:       aws.String(fileType),
+		ChecksumAlgorithm: &checksumAlgorithm,
+		ChecksumSHA256:    aws.String(checksum),
+	}
+	_, err = ac.svc.PutObject(input)
+	return err
+}
+
+func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
+	err := ac.createBucketIfNotExist(bucket)
+	if err != nil {
+		return nil, err
 	}
 
 	input := &s3.CreateMultipartUploadInput{
