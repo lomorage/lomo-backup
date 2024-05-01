@@ -134,6 +134,64 @@ func main() {
 			},
 		},
 		{
+			Name:  "Upload",
+			Usage: "Upload packed ISO files or individual files",
+			Subcommands: cli.Commands{
+				{
+					Name:   "iso",
+					Action: uploadISOs,
+					Usage:  "Upload specified or all iso files",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
+						},
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: "lomorage",
+						},
+						cli.StringFlag{
+							Name:  "part-size,p",
+							Usage: "Size of each upload partition. KB=1000 Byte",
+							Value: "6M",
+						},
+						cli.IntFlag{
+							Name:  "nthreads,n",
+							Usage: "Number of parallel multi part upload",
+							Value: 3,
+						},
+						cli.BoolFlag{
+							Name:  "save-parts,s",
+							Usage: "Save multiparts locally for debug",
+						},
+					},
+				},
+				{
+					Name:   "files",
+					Action: uploadFiles,
+					Usage:  "Upload individual files",
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "table-view, t",
+							Usage: "List all directories in table",
+						},
+					},
+				},
+			},
+		},
+		{
 			Name:  "list",
 			Usage: "List scanned files related commands",
 			Subcommands: cli.Commands{
@@ -165,6 +223,23 @@ func main() {
 					Action:    calculatePartHash,
 					Usage:     "Calculate given files base64 hash",
 					ArgsUsage: "[filename]",
+				},
+				{
+					Name:   "gdrive",
+					Action: listFilesInGDrive,
+					Usage:  "List files in google drive",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "cred",
+							Usage: "Google cloud oauth credential json file",
+							Value: "gdrive-credentials.json",
+						},
+						cli.StringFlag{
+							Name:  "token",
+							Usage: "Token file to access google cloud",
+							Value: "gdrive-token.json",
+						},
+					},
 				},
 			},
 		},
@@ -245,6 +320,32 @@ func main() {
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
 							Value: "lomorage",
+						},
+					},
+				},
+				{
+					Name:   "gcloud-auth",
+					Action: gcloudAuth,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "cred",
+							Usage: "Google cloud oauth credential json file",
+							Value: "gdrive-credentials.json",
+						},
+						cli.StringFlag{
+							Name:  "token",
+							Usage: "Token file to access google cloud",
+							Value: "gdrive-token.json",
+						},
+						cli.StringFlag{
+							Name:  "redirect-path",
+							Usage: "Redirect path defined in credentials.json",
+							Value: "/",
+						},
+						cli.IntFlag{
+							Name:  "redirect-port",
+							Usage: "Redirect port defined in credentials.json",
+							Value: 80,
 						},
 					},
 				},
