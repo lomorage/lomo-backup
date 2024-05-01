@@ -1,0 +1,33 @@
+name: test-pr
+on:
+  push:
+  #pull_request:
+  #  types:
+  #    - opened
+  #    - synchronize
+  #    - reopened
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    container:
+      image: lomorage/lomo-backup:1.0
+    env:
+      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@v4
+      - run: make lint
+
+  install:
+    runs-on: ubuntu-22.04
+    container:
+      image: lomorage/lomo-backup:1.0
+    env:
+      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
+      GOBIN: /usr/local/bin
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - run: make install

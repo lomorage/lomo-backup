@@ -1,3 +1,8 @@
+# Lomo-backup - Most cost saving 2-stages cloud backup solution
+
+[![GitHub Actions](https://github.com/lomorage/lomo-backup/workflows/main/badge.svg)](https://github.com/lomorage/lomo-backup/actions?query=workflow%3Amain)
+
+
 # Motivation
 Photos/videos are very import personal assets and we want to store in our home instead of clouds. We developped lomorage application to self host our own google photo alternative solutions, which has met our main goal.
 

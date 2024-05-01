@@ -1,0 +1,9 @@
+FROM "lomorage/lomo-backup:1.0"
+ENV GOPATH=/go
+ENV GOROOT=/usr/local/go
+ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+WORKDIR /go/src/github.com/lomorage/lomo-backup
+
+COPY ./dockerfiles/entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+ENTRYPOINT /entrypoint.sh "$@"

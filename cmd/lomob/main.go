@@ -43,12 +43,12 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "ignore-files, if",
-					Usage: "List of ignored files, seperated by comman",
+					Usage: "List of ignored files, separated by comma",
 					Value: ".DS_Store,._.DS_Store,Thumbs.db",
 				},
 				cli.StringFlag{
 					Name:  "ignore-dirs, in",
-					Usage: "List of ignored directories, seperated by comman",
+					Usage: "List of ignored directories, separated by comma",
 					Value: ".idea,.git,.github",
 				},
 				cli.IntFlag{
