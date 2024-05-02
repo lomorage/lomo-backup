@@ -24,3 +24,6 @@ dev:
 		-v "${PWD}:/go/src/github.com/lomorage/lomo-backup" \
 		--net host --dns-search local \
 		-it "lomorage/lomo-backup" -d bash
+
+test:
+	go test -v ./common/
