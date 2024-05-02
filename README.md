@@ -1,6 +1,6 @@
-# Lomo-backup - Most cost saving 2-stages cloud backup solution
+# Lomo-backup - Cost saving 2-stages cloud backup solution
 
-[![GitHub Actions](https://github.com/lomorage/lomo-backup/workflows/main/badge.svg)](https://github.com/lomorage/lomo-backup/actions?query=workflow%3Amain)
+[![GitHub Actions](https://github.com/lomorage/lomo-backup/actions/workflows/main.yml/badge.svg)](https://github.com/lomorage/lomo-backup/actions?query=workflow%3AGo)
 
 
 # Motivation

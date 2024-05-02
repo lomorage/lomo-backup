@@ -1,4 +1,4 @@
-name: test-pr
+name: Go
 on:
   push:
   #pull_request:
@@ -31,3 +31,17 @@ jobs:
         with:
           submodules: 'true'
       - run: make install
+
+  test:
+    runs-on: ubuntu-22.04
+    container:
+      image: lomorage/lomo-backup:1.0
+    env:
+      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
+      GOBIN: /usr/local/bin
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - run: make test
