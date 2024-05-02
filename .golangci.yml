@@ -1,0 +1,58 @@
+linters:
+  disable-all: true
+  enable:
+    # default linter
+    - govet
+      #- errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    # enabled linter
+    - bodyclose # checks whether HTTP response body is closed successfully
+    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
+      # rowserrcheck - checks whether Err of rows is checked successfully
+      # stylecheck - Stylecheck is a replacement for golint
+      # gosec - Inspects source code for security problems
+      # interfacer - Linter that suggests narrower interface types
+    - unconvert # Remove unnecessary type conversions
+      # dupl - Tool for code clone detection
+      # goconst - Finds repeated strings that could be replaced by a constant
+    - gocyclo # Computes and checks the cyclomatic complexity of functions
+      # gocognit - Computes and checks the cognitive complexity of functions
+      # asciicheck - Simple linter to check that your code does not contain non-ASCII identifiers
+    - gofmt # Gofmt checks whether code was gofmt-ed. By default this tool runs with -s option to check for code simplification
+    - goimports # Goimports does everything that gofmt does. Additionally it checks unused imports
+      # maligned - Tool to detect Go structs that would take less memory if their fields were sorted
+    # - depguard # Go linter that checks if package imports are in a list of acceptable packages
+    - misspell # Finds commonly misspelled English words in comments
+    #- lll # Reports long lines
+    - unparam # Reports unused function parameters
+      # dogsled - Checks assignments with too many blank identifiers (e.g. x, , , _, := f())
+    # - nakedret # Finds naked returns in functions greater than a specified function length
+    - prealloc # Finds slice declarations that could potentially be preallocated
+      # scopelint - Scopelint checks for unpinned variables in go programs
+      # gocritic - The most opinionated Go source code linter
+      # gochecknoinits - Checks that no init functions are present in Go code
+      # gochecknoglobals - Checks that no globals are present in Go code
+      # godox - Tool for detection of FIXME, TODO and other comment keywords
+      # funlen - Tool for detection of long functions
+    - whitespace # Tool for detection of leading and trailing whitespace
+      # wsl - Whitespace Linter - Forces you to use empty lines!
+      # goprintffuncname - Checks that printf-like functions are named with f at the end
+      # gomnd - An analyzer to detect magic numbers.
+      # goerr113 - Golang linter to check the errors handling expressions
+      # gomodguard - Allow and block list linter for direct Go module dependencies. This is different from depguard where there are different block types for example version constraints and module recommendations.
+      # godot # Check if comments end in a period
+      # testpackage - linter that makes you use a separate _test package
+      # nestif - Reports deeply nested if statements
+      # exportloopref - An analyzer that finds exporting pointers for loop variables.
+      # nolintlint - Reports ill-formed or insufficient nolint directives
+    - typecheck
+linters-settings:
+  revive:
+    confidence: 0.7
+issues:
+  exclude-use-default: false
+run:
+  deadline: 20m

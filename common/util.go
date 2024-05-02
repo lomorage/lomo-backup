@@ -110,7 +110,7 @@ func (prs *FilePartReadSeeker) Seek(offset int64, whence int) (n int64, err erro
 		} else {
 			if prs.current+offset >= prs.end {
 				n, err = prs.f.Seek(prs.end, io.SeekStart)
-				n -= int64(prs.start)
+				n -= prs.start
 				prs.current = prs.end
 				return
 			}
@@ -225,7 +225,7 @@ func CalculateMultiPartsHash(path string, partSize int) ([][]byte, error) {
 
 	partsHash := [][]byte{}
 	var curr, partLength int64
-	var remaining = int64(info.Size())
+	var remaining = info.Size()
 	for curr = 0; remaining != 0; curr += partLength {
 		if remaining < int64(partSize) {
 			partLength = remaining

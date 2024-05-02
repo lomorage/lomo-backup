@@ -462,7 +462,7 @@ func calculatePartHash(ctx *cli.Context) error {
 	}
 
 	var curr, partLength int64
-	var remaining = int64(info.Size())
+	var remaining = info.Size()
 	var no = 1
 	var prs *common.FilePartReadSeeker
 	var h hash.Hash

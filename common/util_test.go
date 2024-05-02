@@ -243,7 +243,7 @@ func TestFilePartReadSeekerReadSeek(t *testing.T) {
 
 	prs = NewFilePartReadSeeker(fpart, 1000, 2000)
 	verifyReadSeek(t, expectFile, prs, 500, 1500, 500, io.SeekStart)
-	verifyReadSeek(t, expectFile, prs, 500, -500, -500, io.SeekCurrent)
+	verifyReadSeek(t, expectFile, prs, 400, -500, -500, io.SeekCurrent)
 }
 
 func TestConcatAndCalculateBase64Hash(t *testing.T) {

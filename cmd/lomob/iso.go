@@ -65,9 +65,8 @@ func mkISO(ctx *cli.Context) error {
 	for {
 		if currentSizeNotInISO < isoSize.Bytes() {
 			currSize := datasize.ByteSize(currentSizeNotInISO)
-			expSize := datasize.ByteSize(isoSize)
 			fmt.Printf("Total size of un-backedup files is %s, less than %s, skip\n",
-				currSize.HR(), expSize.HR())
+				currSize.HR(), isoSize.HR())
 
 			return nil
 		}

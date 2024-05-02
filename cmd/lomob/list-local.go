@@ -136,7 +136,6 @@ func printDirsByTree(dirs map[int]*types.DirInfo) {
 	for _, tree := range scanRootTree {
 		fmt.Println(tree)
 	}
-
 }
 
 func printDirsByTable(dirs map[int]*types.DirInfo) {
