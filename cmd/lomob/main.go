@@ -15,6 +15,8 @@ var (
 	db        *dbx.DB
 
 	lock *sync.Mutex
+
+	defaultBucket = "lomorage"
 )
 
 func main() {
@@ -113,7 +115,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
-							Value: "lomorage",
+							Value: defaultBucket,
 						},
 						cli.StringFlag{
 							Name:  "part-size,p",
@@ -134,7 +136,7 @@ func main() {
 			},
 		},
 		{
-			Name:  "Upload",
+			Name:  "upload",
 			Usage: "Upload packed ISO files or individual files",
 			Subcommands: cli.Commands{
 				{
@@ -160,7 +162,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
-							Value: "lomorage",
+							Value: defaultBucket,
 						},
 						cli.StringFlag{
 							Name:  "part-size,p",
@@ -181,11 +183,22 @@ func main() {
 				{
 					Name:   "files",
 					Action: uploadFiles,
-					Usage:  "Upload individual files",
+					Usage:  "Upload individual files not in ISO to google drive",
 					Flags: []cli.Flag{
-						cli.BoolFlag{
-							Name:  "table-view, t",
-							Usage: "List all directories in table",
+						cli.StringFlag{
+							Name:  "cred",
+							Usage: "Google cloud oauth credential json file",
+							Value: "gdrive-credentials.json",
+						},
+						cli.StringFlag{
+							Name:  "token",
+							Usage: "Token file to access google cloud",
+							Value: "gdrive-token.json",
+						},
+						cli.StringFlag{
+							Name:  "folder",
+							Usage: "Folders to list",
+							Value: defaultBucket,
 						},
 					},
 				},
@@ -239,6 +252,11 @@ func main() {
 							Usage: "Token file to access google cloud",
 							Value: "gdrive-token.json",
 						},
+						cli.StringFlag{
+							Name:  "folder",
+							Usage: "Folders to list",
+							Value: defaultBucket,
+						},
 					},
 				},
 			},
@@ -291,7 +309,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
-							Value: "lomorage",
+							Value: defaultBucket,
 						},
 					},
 				},
@@ -319,7 +337,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
-							Value: "lomorage",
+							Value: defaultBucket,
 						},
 					},
 				},
