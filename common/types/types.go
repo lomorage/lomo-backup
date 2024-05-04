@@ -50,6 +50,7 @@ type DirInfo struct {
 	NumberOfFiles int
 	NumberOfDirs  int
 	TotalFileSize int
+	RefID         string // ID in cloud
 	Path          string
 	ModTime       time.Time
 	CreateTime    time.Time
@@ -60,6 +61,7 @@ type FileInfo struct {
 	ID      int
 	DirID   int
 	IsoID   int
+	RefID   string // ID in cloud
 	Name    string
 	Hash    string
 	Size    int

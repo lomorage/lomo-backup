@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lomorage/lomo-backup/common/gcloud"
 	"github.com/sirupsen/logrus"
@@ -34,7 +35,10 @@ func uploadFiles(ctx *cli.Context) error {
 	}
 
 	uploadRootFolder := ctx.String("folder")
-	exist, uploadRootFolderID, err := client.GetAndCreateFileIDIfNotExist(uploadRootFolder, "", nil)
+	exist, uploadRootFolderID, err := client.GetAndCreateFileIDIfNotExist(uploadRootFolder, "", nil,
+		gcloud.FileMetadata{
+			ModTime: time.Now(),
+		})
 	if err != nil {
 		return err
 	}
@@ -58,7 +62,7 @@ func uploadFiles(ctx *cli.Context) error {
 		parentFolderID string
 	}
 	existingDirsInCloud := map[string]dirInfoInCloud{
-		"": dirInfoInCloud{folderID: uploadRootFolderID},
+		"": {folderID: uploadRootFolderID},
 	}
 	for _, f := range fileInfos {
 		scanRoot, ok := scanRootDirs[f.DirID]
@@ -66,13 +70,21 @@ func uploadFiles(ctx *cli.Context) error {
 			return fmt.Errorf("unable to find scan root directory whose ID is %d", f.DirID)
 		}
 
+		origFolder := scanRoot
+
 		// flatten scan root dir so as to have only one folder
 		// find its folder ID in google cloud, and create one if not exist, then add into local map
 		scanRootFolderInCloud := flattenScanRootDir(strings.Trim(scanRoot, string(os.PathSeparator)))
 		info, ok := existingDirsInCloud[scanRootFolderInCloud]
 		if !ok {
+			stat, err := os.Stat(origFolder)
+			if err != nil {
+				return err
+			}
+
 			info = dirInfoInCloud{parentFolderID: uploadRootFolderID}
-			ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(scanRootFolderInCloud, uploadRootFolderID, nil)
+			ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(scanRootFolderInCloud, uploadRootFolderID, nil,
+				gcloud.FileMetadata{ModTime: stat.ModTime()})
 			if err != nil {
 				return err
 			}
@@ -83,17 +95,23 @@ func uploadFiles(ctx *cli.Context) error {
 		}
 		scanRootFolderIDInCloud := info.folderID
 
-		// recursive check all directories' existance in cloud, and create if not exist
+		// check all directories' existence in cloud, and create if not exist
 		dir, filename := filepath.Split(f.Name)
 		dir = strings.Trim(dir, string(os.PathSeparator))
 		folderKey := scanRootFolderInCloud
 		parentID := scanRootFolderIDInCloud
 		for _, p := range strings.Split(dir, string(os.PathSeparator)) {
+			origFolder = filepath.Join(origFolder, p)
 			folderKey += "/" + p
 			info, ok = existingDirsInCloud[folderKey]
 			if !ok {
+				stat, err := os.Stat(origFolder)
+				if err != nil {
+					return err
+				}
 				info = dirInfoInCloud{parentFolderID: parentID}
-				ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(p, parentID, nil)
+				ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(p, parentID, nil,
+					gcloud.FileMetadata{ModTime: stat.ModTime()})
 				if err != nil {
 					return err
 				}
@@ -112,12 +130,19 @@ func uploadFiles(ctx *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		logrus.Debugf("Uploading: %s into %s (%s):%s\n", fullLocalPath, folderKey, parentID, filename)
-		_, err = client.CreateFile(filename, parentID, reader)
+		logrus.Infof("Uploading: %s into %s (%s):%s\n", fullLocalPath, folderKey, parentID, filename)
+		stat, err := reader.Stat()
 		if err != nil {
 			return err
 		}
-		logrus.Debugf("Uploading success")
+		_, err = client.CreateFile(filename, parentID, reader, gcloud.FileMetadata{
+			ModTime: stat.ModTime(),
+			Hash:    f.Hash,
+		})
+		if err != nil {
+			return err
+		}
+		logrus.Infof("Uploading success")
 		err = reader.Close()
 		if err != nil {
 			logrus.Warnf("Close %s: %s", fullLocalPath, err)

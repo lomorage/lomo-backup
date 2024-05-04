@@ -232,12 +232,6 @@ func main() {
 					},
 				},
 				{
-					Name:      "parts",
-					Action:    calculatePartHash,
-					Usage:     "Calculate given files base64 hash",
-					ArgsUsage: "[filename]",
-				},
-				{
 					Name:   "gdrive",
 					Action: listFilesInGDrive,
 					Usage:  "List files in google drive",
