@@ -2,6 +2,9 @@ package types
 
 import "time"
 
+// IsoIDCloud is to flag the file is uploaded into cloud and not packed in ISO yet
+const IsoIDCloud = -1
+
 type IsoStatus int
 
 const (

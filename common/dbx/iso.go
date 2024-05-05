@@ -11,12 +11,17 @@ import (
 	//_ "github.com/mattn/go-sqlite3"
 )
 
+var listFilesNotInIsoOrCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.iso_id, f.size, f.mod_time from files as f" +
+	" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 or f.iso_id=" + strconv.Itoa(types.IsoIDCloud) +
+	" order by f.dir_id, f.id"
+
 const (
-	listFilesNotInIsoStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.mod_time from files as f" +
+	listFilesNotInIsoAndCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.mod_time from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
 	getTotalFileSizeNotInIsoStmt = "select sum(size) from files where iso_id=0"
 	getTotalFilesInIsoStmt       = "select sum(size), count(size) from files where iso_id=?"
-	updateIsoIDStmt              = "update files set iso_id=%d where id in (%s)"
+	updateBatchFilesIsoIDStmt    = "update files set iso_id=%d where id in (%s)"
+	updateFileIsoIDStmt          = "update files set iso_id=? where id=?"
 
 	getIsoByNameStmt = "select id, size, hash_hex, hash_base64, region, bucket, upload_id, upload_key," +
 		" create_time from isos where name=?"
@@ -37,12 +42,12 @@ const (
 	updatePartUploadEtagStatusStmt = "update parts set etag=?, status=? where iso_id=? and part_no=?"
 )
 
-func (db *DB) ListFilesNotInISO() ([]*types.FileInfo, error) {
+func (db *DB) ListFilesNotInISOAndCloud() ([]*types.FileInfo, error) {
 	files := []*types.FileInfo{}
 
-	err := db.retryIfLocked("list files not in ISO",
+	err := db.retryIfLocked("list files not in ISO and cloud",
 		func(tx *sql.Tx) error {
-			rows, err := tx.Query(listFilesNotInIsoStmt)
+			rows, err := tx.Query(listFilesNotInIsoAndCloudStmt)
 			if err != nil {
 				return nil
 			}
@@ -50,6 +55,32 @@ func (db *DB) ListFilesNotInISO() ([]*types.FileInfo, error) {
 				var path, name string
 				f := &types.FileInfo{}
 				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size, &f.ModTime)
+				if err != nil {
+					return err
+				}
+				f.Name = filepath.Join(path, name)
+
+				files = append(files, f)
+			}
+			return rows.Err()
+		},
+	)
+	return files, err
+}
+
+func (db *DB) ListFilesNotInISOOrCloud() ([]*types.FileInfo, error) {
+	files := []*types.FileInfo{}
+
+	err := db.retryIfLocked("list files not in ISO or cloud",
+		func(tx *sql.Tx) error {
+			rows, err := tx.Query(listFilesNotInIsoOrCloudStmt)
+			if err != nil {
+				return nil
+			}
+			for rows.Next() {
+				var path, name string
+				f := &types.FileInfo{}
+				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.IsoID, &f.Size, &f.ModTime)
 				if err != nil {
 					return err
 				}
@@ -155,7 +186,7 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 				return err
 			}
 
-			res, err = tx.Exec(fmt.Sprintf(updateIsoIDStmt, isoID, fileIDs))
+			res, err = tx.Exec(fmt.Sprintf(updateBatchFilesIsoIDStmt, isoID, fileIDs))
 			if err != nil {
 				return err
 			}
@@ -164,6 +195,15 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 		},
 	)
 	return int(isoID), int(updatedFiles), err
+}
+
+func (db *DB) UpdateFileIsoID(isoID, fileID int) error {
+	return db.retryIfLocked(fmt.Sprintf("file %d's iso ID %d", fileID, isoID),
+		func(tx *sql.Tx) error {
+			_, err := tx.Exec(updateFileIsoIDStmt, isoID, fileID)
+			return err
+		},
+	)
 }
 
 func (db *DB) UpdateIsoBase64Hash(isoID int, hash string) error {

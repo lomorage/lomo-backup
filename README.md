@@ -46,9 +46,10 @@ Pre-requsition commands:
 
 Features:
 
-- :heavy_check_mark: pack all photos/videos into multiple ISOs and upload to Glacier
+- :heavy_check_mark: pack all photos/videos into multiple ISOs and upload to S3
 - :heavy_check_mark: metadata to track which file is in which iso
-- [ ] backup files not in ISO to staging station, Google drive
+- :heavy_check_mark: backup files not in ISO to staging station, Google drive
+- [ ] pack all photos/videos into multiple ISOs and upload to Glancier
 - [ ] encrypt iso files before upload to Glacier, Google drive
 - [ ] metadata to track which files are in staging station
 - [ ] daemon running mode to watch folder change only, avoid scanning all folder daily
@@ -71,6 +72,37 @@ Also welcome to try our free Photo backup applications. https://lomorage.com.
 - Multipart upload to S3
 - Resume upload if one part was fail
 - Self define iso size
+- Encryption all files before upload
+
+# Security Model
+The security model is from repository [filecrypt](https://github.com/kisom/filecrypt). Refer book [Practical Cryptography With Go](https://leanpub.com/gocrypto/read) for more detail.
+
+This program assumes that an attacker does not currently have access
+to either the machine the archive is generated on, or on the machine
+it is unpacked on. It is intended for medium to long-term storage of
+sensitive data at rest on removeable media that may be used to load data
+onto a variety of platforms (Windows, OS X, Linux, OpenBSD), where the
+threat of losing the storage medium is considerably higher than losing a
+secured laptop that the archive is generated on.
+
+Key derivation is done by pairing a password with a randomly-chosen
+256-bit salt using the scrypt parameters N=2^20, r=8, p=1. This makes
+it astronomically unlikely that the same key will be derived from the
+same passphrase. The key is used as a NaCl secretbox key; the nonce for
+encryption is randomly generated. It is thought that this will be highly
+unlikely to cause nonce reuse issues.
+
+The primary weaknesses might come from an attack on the passphrase or
+via cryptanalysis of the ciphertext. The ciphertext is produced using
+NaCl appended to a random salt, so it is unlikely this will produce any
+meaningful information. One exception might be if this program is used
+to encrypt a known set of files, and the attacker compares the length of
+the archive to a list of known file sizes.
+
+An attack on the passphrase will most likely come via a successful
+dictionary attack. The large salt and high scrypt parameters will
+deter attackers without the large resources required to brute force
+this. Dictionary attacks will also be expensive for these same reasons.
 
 # Pre-requisition
 ## AWS Glacier API Access ID and Access Secret

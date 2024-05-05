@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lomorage/lomo-backup/common/gcloud"
+	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -51,9 +52,13 @@ func uploadFiles(ctx *cli.Context) error {
 		return err
 	}
 
-	fileInfos, err := db.ListFilesNotInISO()
+	fileInfos, err := db.ListFilesNotInISOAndCloud()
 	if err != nil {
 		return err
+	}
+
+	if len(fileInfos) == 0 {
+		fmt.Println("No files need to be uploaded to google drive")
 	}
 
 	// root folder is
@@ -147,7 +152,13 @@ func uploadFiles(ctx *cli.Context) error {
 		if err != nil {
 			logrus.Warnf("Close %s: %s", fullLocalPath, err)
 		}
+		err = db.UpdateFileIsoID(types.IsoIDCloud, f.ID)
+		if err != nil {
+			return err
+		}
 	}
+
+	fmt.Printf("%d files are uploaded to google drive\n", len(fileInfos))
 
 	return nil
 }

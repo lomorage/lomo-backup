@@ -253,6 +253,17 @@ func main() {
 						},
 					},
 				},
+				{
+					Name:   "files",
+					Action: listFilesNotInIso,
+					Usage:  "List all files not packed in ISO including the ones uploaded in google drive",
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "no-cloud",
+							Usage: "List all files not in google drive or packed in ISO",
+						},
+					},
+				},
 			},
 		},
 		{
