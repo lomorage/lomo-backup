@@ -168,3 +168,38 @@ func printDirsByTable(dirs map[int]*types.DirInfo) {
 			common.FormatTime(d.ModTime), d.Path)
 	}
 }
+
+func listFilesNotInIso(ctx *cli.Context) error {
+	err := initDB(ctx.GlobalString("db"))
+	if err != nil {
+		return err
+	}
+
+	scanRootDirs, err := db.ListScanRootDirs()
+	if err != nil {
+		return err
+	}
+
+	files, err := db.ListFilesNotInISOOrCloud()
+	if err != nil {
+		return err
+	}
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
+	defer writer.Flush()
+
+	fmt.Fprint(writer, "In Cloud\tPath\n")
+
+	for _, f := range files {
+		scanRootDir, ok := scanRootDirs[f.DirID]
+		if !ok {
+			logrus.Warnf("%s not found root scan dir %d", f.Name, f.DirID)
+			continue
+		}
+		if f.IsoID == types.IsoIDCloud {
+			fmt.Fprintf(writer, "Y\t%s\n", filepath.Join(scanRootDir, f.Name))
+		} else {
+			fmt.Fprintf(writer, " \t%s\n", filepath.Join(scanRootDir, f.Name))
+		}
+	}
+	return nil
+}

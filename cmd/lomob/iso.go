@@ -52,7 +52,7 @@ func mkISO(ctx *cli.Context) error {
 		return err
 	}
 
-	files, err := db.ListFilesNotInISO()
+	files, err := db.ListFilesNotInISOOrCloud()
 	if err != nil {
 		return err
 	}
