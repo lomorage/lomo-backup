@@ -16,6 +16,7 @@ import (
 	"github.com/lomorage/lomo-backup/clients"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
+	lomoio "github.com/lomorage/lomo-backup/common/io"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -288,7 +289,7 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 		logrus.Infof("Uploading %s's part %d [%d, %d]", isoFilename, p.PartNo, start, end)
 
 		var readSeeker io.ReadSeeker
-		prs := common.NewFilePartReadSeeker(isoFile, start, end)
+		prs := lomoio.NewFilePartReadSeeker(isoFile, start, end)
 		if saveParts {
 			partFile, err := os.Create(isoFilename + ".part" + strconv.Itoa(p.PartNo))
 			if err != nil {
@@ -299,7 +300,7 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 				return err
 			}
 			defer partFile.Close()
-			readSeeker = common.NewReadSeekSaver(partFile, prs)
+			readSeeker = lomoio.NewReadSeekSaver(partFile, prs)
 		} else {
 			readSeeker = prs
 		}
@@ -464,7 +465,7 @@ func calculatePartHash(ctx *cli.Context) error {
 	var curr, partLength int64
 	var remaining = info.Size()
 	var no = 1
-	var prs *common.FilePartReadSeeker
+	var prs *lomoio.FilePartReadSeeker
 	var h hash.Hash
 	for curr = 0; remaining != 0; curr += partLength {
 		if remaining < int64(partSize) {
@@ -479,7 +480,7 @@ func calculatePartHash(ctx *cli.Context) error {
 
 		fmt.Printf("Calculating base64 hash from %d to %d and remaining %d\n",
 			curr, curr+partLength, remaining)
-		prs = common.NewFilePartReadSeeker(f, curr, curr+partLength)
+		prs = lomoio.NewFilePartReadSeeker(f, curr, curr+partLength)
 		h = sha256.New()
 		_, err = io.Copy(h, prs)
 		if err != nil {
