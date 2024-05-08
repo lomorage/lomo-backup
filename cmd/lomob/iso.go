@@ -17,6 +17,7 @@ import (
 	"github.com/djherbis/times"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
+	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -215,11 +216,11 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		}
 		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(fileInfo.Size())}
 
-		hash, err := common.CalculateHash(isoFilename)
+		hash, err := lomohash.CalculateHash(isoFilename)
 		if err != nil {
 			return 0, "", nil, err
 		}
-		isoInfo.HashHex = common.CalculateHashHex(hash)
+		isoInfo.HashHex = lomohash.CalculateHashHex(hash)
 		// create db entry and update file info
 		start := time.Now()
 		_, count, err := db.CreateIsoWithFileIDs(isoInfo,

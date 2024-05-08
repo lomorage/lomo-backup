@@ -1,4 +1,4 @@
-package common
+package hash
 
 import (
 	"encoding/base64"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testFilename = "./testdata/indepedant_declaration.txt"
+const testFilename = "../testdata/indepedant_declaration.txt"
 
 // hex hash is calculated by "sha256sum indepedant_declaration.txt"
 const expectHexHash = "4cfd75f4c8aa09ff1992e493999fd1c0333da4393fffd9d207b60c6dc2516263"
