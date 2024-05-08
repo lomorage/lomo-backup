@@ -16,6 +16,7 @@ import (
 	"github.com/lomorage/lomo-backup/clients"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
+	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	lomoio "github.com/lomorage/lomo-backup/common/io"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/pkg/errors"
@@ -51,11 +52,11 @@ func validateISO(isoFilename string) (*os.File, *types.ISOInfo, error) {
 		return nil, nil, errors.Errorf("Size in DB is %d, but got %d", iso.Size, info.Size())
 	}
 
-	hash, err := common.CalculateHash(isoFilename)
+	hash, err := lomohash.CalculateHash(isoFilename)
 	if err != nil {
 		return nil, nil, err
 	}
-	hashHex := common.CalculateHashHex(hash)
+	hashHex := lomohash.CalculateHashHex(hash)
 	if hashHex != iso.HashHex {
 		return nil, nil, errors.Errorf("Hash in DB is %s, but got %s", iso.HashHex, hash)
 	}
@@ -76,7 +77,7 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	if len(parts) != 0 {
 		return isoFile, isoInfo, parts, nil
 	}
-	partsChecksum, err := common.CalculateMultiPartsHash(isoFilename, partSize)
+	partsChecksum, err := lomohash.CalculateMultiPartsHash(isoFilename, partSize)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -93,8 +94,8 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 		parts[i] = &types.PartInfo{
 			PartNo:     i + 1,
 			Size:       partLength,
-			HashHex:    common.CalculateHashHex(p),
-			HashBase64: common.CalculateHashBase64(p),
+			HashHex:    lomohash.CalculateHashHex(p),
+			HashBase64: lomohash.CalculateHashBase64(p),
 		}
 		remaining -= partLength
 	}
@@ -103,7 +104,7 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	isoInfo.HashBase64, err = common.ConcatAndCalculateBase64Hash(partsChecksum)
+	isoInfo.HashBase64, err = lomohash.ConcatAndCalculateBase64Hash(partsChecksum)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -124,7 +125,7 @@ func prepareUploadRequest(cli clients.UploadClient, region, bucket string,
 		}
 		remoteHash := strings.Split(remoteInfo.HashBase64, "-")[0]
 		if remoteHash != isoInfo.HashBase64 {
-			return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
+			return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided ccommonhecksum is %s",
 				isoFilename, remoteHash, isoInfo.HashBase64)
 		}
 		// no need upload, return nil upload request
@@ -205,7 +206,7 @@ func uploadISOMetafile(cli clients.UploadClient, bucket, isoFilename string) err
 		return nil
 	}
 
-	hashBase64 := common.CalculateHashBase64(common.CalculateHashBytes(treeBuf))
+	hashBase64 := lomohash.CalculateHashBase64(lomohash.CalculateHashBytes(treeBuf))
 
 	remoteInfo, err := cli.GetObject(bucket, metaFilename)
 	if err != nil {
@@ -435,15 +436,15 @@ func calculatePartHash(ctx *cli.Context) error {
 	filename := ctx.Args()[0]
 	partNumber := ctx.Int("part-number")
 	if partNumber == 0 {
-		parts, err := common.CalculateMultiPartsHash(filename, int(partSize))
+		parts, err := lomohash.CalculateMultiPartsHash(filename, int(partSize))
 		if err != nil {
 			return err
 		}
 		for i, p := range parts {
-			fmt.Printf("Part %d: %s\n", i+1, common.CalculateHashBase64(p))
+			fmt.Printf("Part %d: %s\n", i+1, lomohash.CalculateHashBase64(p))
 		}
 
-		overall, err := common.ConcatAndCalculateBase64Hash(parts)
+		overall, err := lomohash.ConcatAndCalculateBase64Hash(parts)
 		if err != nil {
 			return err
 		}
@@ -487,7 +488,7 @@ func calculatePartHash(ctx *cli.Context) error {
 			return err
 		}
 
-		fmt.Printf("Part %d: %s\n", partNumber, common.CalculateHashBase64(h.Sum(nil)))
+		fmt.Printf("Part %d: %s\n", partNumber, lomohash.CalculateHashBase64(h.Sum(nil)))
 		return nil
 	next:
 		no++

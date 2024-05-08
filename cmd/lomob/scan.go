@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/dbx"
+	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	"github.com/lomorage/lomo-backup/common/scan"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/sirupsen/logrus"
@@ -147,7 +147,7 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		return nil
 	}
 
-	hash, err := common.CalculateHash(path)
+	hash, err := lomohash.CalculateHash(path)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		Name:    info.Name(),
 		Size:    int(info.Size()),
 		ModTime: info.ModTime(),
-		Hash:    common.CalculateHashHex(hash),
+		Hash:    lomohash.CalculateHashHex(hash),
 	}
 
 	_, err = db.InsertFile(fi)
