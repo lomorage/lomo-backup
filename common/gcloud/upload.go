@@ -19,6 +19,7 @@ const mimiTypeFolder = "application/vnd.google-apps.folder"
 type Config struct {
 	CredFilename  string
 	TokenFilename string
+	RefreshToken  bool
 }
 
 type DriveClient struct {
@@ -39,6 +40,18 @@ func CreateDriveClient(conf *Config) (*DriveClient, error) {
 	}
 
 	token, err := tokenFromFile(conf.TokenFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	if conf.RefreshToken {
+		token, err = refreshAccessToken(ctx, config, token)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = SaveToken(conf.TokenFilename, token)
 	if err != nil {
 		return nil, err
 	}

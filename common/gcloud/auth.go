@@ -19,6 +19,12 @@ var (
 	ch chan string
 )
 
+func refreshAccessToken(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (*oauth2.Token, error) {
+	oauthClient := config.TokenSource(ctx, token)
+
+	return oauthClient.Token()
+}
+
 func RefreshAccessToken(conf *Config) (*oauth2.Token, error) {
 	ctx := context.Background()
 	b, err := os.ReadFile(conf.CredFilename)
@@ -37,9 +43,7 @@ func RefreshAccessToken(conf *Config) (*oauth2.Token, error) {
 		return nil, err
 	}
 
-	oauthClient := config.TokenSource(ctx, token)
-
-	return oauthClient.Token()
+	return refreshAccessToken(ctx, config, token)
 }
 
 func AuthHelper(redirectPath string, redirectPort int, conf *Config) error {
