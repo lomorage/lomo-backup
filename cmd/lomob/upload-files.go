@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lomorage/lomo-backup/common/crypto"
 	"github.com/lomorage/lomo-backup/common/gcloud"
+	"github.com/lomorage/lomo-backup/common/hash"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -24,22 +26,24 @@ func uploadFiles(ctx *cli.Context) error {
 		return err
 	}
 
-	client, err := gcloud.CreateClient(&gcloud.Config{
+	masterKey := ctx.String("encrypt-key")
+	if masterKey == "" {
+		masterKey, err = getMasterKey()
+		if err != nil {
+			return err
+		}
+	}
+
+	client, err := gcloud.CreateDriveClient(&gcloud.Config{
 		CredFilename:  ctx.String("cred"),
 		TokenFilename: ctx.String("token"),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to retrieve Drive client: %v", err)
 	}
-	if err != nil {
-		return fmt.Errorf("unable to retrieve Drive client: %v", err)
-	}
 
 	uploadRootFolder := ctx.String("folder")
-	exist, uploadRootFolderID, err := client.GetAndCreateFileIDIfNotExist(uploadRootFolder, "", nil,
-		gcloud.FileMetadata{
-			ModTime: time.Now(),
-		})
+	exist, uploadRootFolderID, err := client.GetAndCreateFileIDIfNotExist(uploadRootFolder, "", nil, time.Now())
 	if err != nil {
 		return err
 	}
@@ -89,7 +93,7 @@ func uploadFiles(ctx *cli.Context) error {
 
 			info = dirInfoInCloud{parentFolderID: uploadRootFolderID}
 			ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(scanRootFolderInCloud, uploadRootFolderID, nil,
-				gcloud.FileMetadata{ModTime: stat.ModTime()})
+				stat.ModTime())
 			if err != nil {
 				return err
 			}
@@ -115,8 +119,7 @@ func uploadFiles(ctx *cli.Context) error {
 					return err
 				}
 				info = dirInfoInCloud{parentFolderID: parentID}
-				ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(p, parentID, nil,
-					gcloud.FileMetadata{ModTime: stat.ModTime()})
+				ok, info.folderID, err = client.GetAndCreateFileIDIfNotExist(p, parentID, nil, stat.ModTime())
 				if err != nil {
 					return err
 				}
@@ -131,28 +134,49 @@ func uploadFiles(ctx *cli.Context) error {
 		fullLocalPath := filepath.Join(scanRoot, f.Name)
 
 		// reuse folder ID if it is in map already
-		reader, err := os.Open(fullLocalPath)
+		file, err := os.Open(fullLocalPath)
 		if err != nil {
 			return err
 		}
+
+		stat, err := file.Stat()
+		if err != nil {
+			return err
+		}
+
+		encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
+		if err != nil {
+			return err
+		}
+
+		encryptor, err := crypto.NewEncryptor(file, encryptKey, iv)
+		if err != nil {
+			return err
+		}
+
 		logrus.Infof("Uploading: %s into %s (%s):%s\n", fullLocalPath, folderKey, parentID, filename)
-		stat, err := reader.Stat()
-		if err != nil {
-			return err
-		}
-		_, err = client.CreateFile(filename, parentID, reader, gcloud.FileMetadata{
-			ModTime: stat.ModTime(),
-			Hash:    f.Hash,
-		})
+
+		fileID, err := client.CreateFile(filename, parentID, encryptor, stat.ModTime())
 		if err != nil {
 			return err
 		}
 		logrus.Infof("Uploading success")
-		err = reader.Close()
+		err = file.Close()
 		if err != nil {
 			logrus.Warnf("Close %s: %s", fullLocalPath, err)
 		}
-		err = db.UpdateFileIsoID(types.IsoIDCloud, f.ID)
+
+		hashEnc := hash.CalculateHashHex(encryptor.GetHash())
+		err = db.UpdateFileIsoIDAndEncHash(types.IsoIDCloud, f.ID, hashEnc)
+		if err != nil {
+			return err
+		}
+
+		// add encrypt hash as part of the file's metadata
+		err = client.UpdateFileMetadata(fileID, map[string]string{
+			types.MetadataKeyHashOrig:    f.Hash,
+			types.MetadataKeyHashEncrypt: hashEnc,
+		})
 		if err != nil {
 			return err
 		}

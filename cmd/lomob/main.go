@@ -178,6 +178,11 @@ func main() {
 							Name:  "save-parts,s",
 							Usage: "Save multiparts locally for debug",
 						},
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
 					},
 				},
 				{
@@ -199,6 +204,55 @@ func main() {
 							Name:  "folder",
 							Usage: "Folders to list",
 							Value: defaultBucket,
+						},
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:  "restore",
+			Usage: "Restore encrypted files cloud",
+			Subcommands: cli.Commands{
+				{
+					Name:   "aws",
+					Action: listScanedDirs,
+					Usage:  "List all scanned directories",
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "table-view, t",
+							Usage: "List all directories in table",
+						},
+					},
+				},
+				{
+					Name:      "gdrive",
+					Action:    restoreGdriveFile,
+					Usage:     "Restore files in google drive",
+					ArgsUsage: "[encrypted file name in fullpath]",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "cred",
+							Usage: "Google cloud oauth credential json file",
+							Value: "gdrive-credentials.json",
+						},
+						cli.StringFlag{
+							Name:  "token",
+							Usage: "Token file to access google cloud",
+							Value: "gdrive-token.json",
+						},
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
+						cli.StringFlag{
+							Name:  "output, o",
+							Usage: "Saved file name",
 						},
 					},
 				},
@@ -271,9 +325,39 @@ func main() {
 			Usage: "Various tools",
 			Subcommands: cli.Commands{
 				{
+					Name:      "encrypt",
+					Action:    encryptCmd,
+					Usage:     "Encrypt local file",
+					ArgsUsage: "Usage: [input filename] [[output filename]]. If output filename is not given, it will be <intput filename>.enc",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
+					},
+				},
+				{
+					Name:      "decrypt",
+					Action:    decryptLocalFile,
+					Usage:     "Encrypt local file",
+					ArgsUsage: "[filename]",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
+						cli.StringFlag{
+							Name:  "output, o",
+							Usage: "Saved file name",
+						},
+					},
+				},
+				{
 					Name:      "parts",
 					Action:    calculatePartHash,
-					Usage:     "Calculate given files base64 hash",
+					Usage:     "Calculate given files base64 hash without encryption",
 					ArgsUsage: "[filename]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
@@ -369,6 +453,22 @@ func main() {
 							Name:  "redirect-port",
 							Usage: "Redirect port defined in credentials.json",
 							Value: 80,
+						},
+					},
+				},
+				{
+					Name:   "gcloud-auth-refresh",
+					Action: gcloudTokenRefresh,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "cred",
+							Usage: "Google cloud oauth credential json file",
+							Value: "gdrive-credentials.json",
+						},
+						cli.StringFlag{
+							Name:  "token",
+							Usage: "Token file to access google cloud",
+							Value: "gdrive-token.json",
 						},
 					},
 				},

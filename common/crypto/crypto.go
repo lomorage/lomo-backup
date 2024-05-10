@@ -12,14 +12,21 @@ type Encryptor struct {
 	sreader *lomoio.CryptoStreamReader
 }
 
-// Encrytor wrap io.CryptStreamReader and create ciper.Stream automatically
-func NewEncryptor(r io.Reader, key, iv []byte) (*Encryptor, error) {
+func newCipherStream(key, iv []byte) (cipher.Stream, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 
-	stream := cipher.NewCTR(block, iv)
+	return cipher.NewCTR(block, iv), nil
+}
+
+// Encrytor wrap io.CryptStreamReader and create ciper.Stream automatically
+func NewEncryptor(r io.Reader, key, iv []byte) (*Encryptor, error) {
+	stream, err := newCipherStream(key, iv)
+	if err != nil {
+		return nil, err
+	}
 
 	en := &Encryptor{}
 	en.sreader = lomoio.NewCryptoStreamReader(r, iv, stream)
@@ -28,6 +35,10 @@ func NewEncryptor(r io.Reader, key, iv []byte) (*Encryptor, error) {
 
 func (e *Encryptor) Read(p []byte) (int, error) {
 	return e.sreader.Read(p)
+}
+
+func (e *Encryptor) GetHash() []byte {
+	return e.sreader.GetHash()
 }
 
 type Decryptor struct {

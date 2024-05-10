@@ -71,6 +71,7 @@ Also welcome to try our free Photo backup applications. https://lomorage.com.
 # Feature highlights
 - Multipart upload to S3
 - Resume upload if one part was fail
+- Checksum validation during upload
 - Self define iso size
 - Encryption all files before upload
 
@@ -103,6 +104,12 @@ An attack on the passphrase will most likely come via a successful
 dictionary attack. The large salt and high scrypt parameters will
 deter attackers without the large resources required to brute force
 this. Dictionary attacks will also be expensive for these same reasons.
+
+### Key & Salt & Nonce
+`Lomo-backup` encrypts all data and metadata (original filename) while uploading the file to cloud and decrypts it upon retrieval on the fly. Each file upload has its own, unique encryption key derived from the master key. Master key is masked input from command line or derived from environment variable `LOMOB_MASTER_KEY`. The KDF (Key Derived Function) is agron2 which is the winner of the Password Hashing Competition. Salt for KDF is the same for encryption, and is generated randomly, and unique for each file.
+
+### Notes
+- Filename is not encrypted
 
 # Pre-requisition
 ## AWS Glacier API Access ID and Access Secret
@@ -271,3 +278,6 @@ ID    Name                          Size       Status                   Region  
 ```
 
 ### Upload ISO
+
+## License
+This software is released under GPL-3.0.

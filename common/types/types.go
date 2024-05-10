@@ -5,6 +5,11 @@ import "time"
 // IsoIDCloud is to flag the file is uploaded into cloud and not packed in ISO yet
 const IsoIDCloud = -1
 
+const (
+	MetadataKeyHashOrig    = "hash_orig"
+	MetadataKeyHashEncrypt = "hash_enc"
+)
+
 type IsoStatus int
 
 const (
@@ -61,14 +66,15 @@ type DirInfo struct {
 
 // FileInfo is structure for file
 type FileInfo struct {
-	ID      int
-	DirID   int
-	IsoID   int
-	RefID   string // ID in cloud
-	Name    string
-	Hash    string
-	Size    int
-	ModTime time.Time
+	ID          int
+	DirID       int
+	IsoID       int
+	RefID       string // ID in cloud
+	Name        string
+	Hash        string
+	HashEncrypt string
+	Size        int
+	ModTime     time.Time
 }
 
 // ISOInfo is structure for one iso file

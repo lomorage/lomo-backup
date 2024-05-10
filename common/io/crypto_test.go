@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/hex"
 	"testing"
 
@@ -17,27 +18,41 @@ func getCryptoStream(t *testing.T, key, iv []byte) cipher.Stream {
 	return cipher.NewCTR(block, iv)
 }
 
-func verifyCryptWriterRead(t *testing.T, r *CryptoStreamReader, stepNonce, stepBuf, nl, l int, expectData []byte) {
-	// longer buffer
-	buf := make([]byte, stepNonce)
+func verifyCryptoReadOnce(t *testing.T, r *CryptoStreamReader, step, l int, expectData []byte) {
+	buf := make([]byte, step)
 	offset := 0
-	for i := 0; i < nl; i += stepNonce {
+	for offset < l {
 		n, err := r.Read(buf)
-		require.Nil(t, err)
-		require.EqualValues(t, stepNonce, n, "Iteration %d", i)
-		require.EqualValues(t, expectData[offset:offset+stepNonce], buf)
-		offset += stepNonce
+		require.Nil(t, err, "offset %d", offset)
+		expectReadLen := step
+		if step > l {
+			expectReadLen = l
+		} else if offset+step > l {
+			expectReadLen = l - offset
+		}
+		require.EqualValues(t, expectReadLen, n, "offset %d", offset)
+		require.EqualValues(t, expectData[offset:offset+expectReadLen], buf[:expectReadLen], "offset %d", offset)
+		offset += n
 	}
+	// check partial file
+	if offset == l || offset-step >= l {
+		return
+	}
+	offset -= step
+	// check last part
+	n, err := r.Read(buf)
+	require.Nil(t, err)
+	require.EqualValues(t, l-offset, n, "offset %d", offset)
+	require.EqualValues(t, expectData[offset:l], buf[:n])
+}
 
-	// reduce buffer for regular stepNonce
-	buf = make([]byte, stepBuf)
-	for i := 0; i < l; i += stepBuf {
-		n, err := r.Read(buf)
-		require.Nil(t, err)
-		require.EqualValues(t, stepBuf, n, "Iteration %d", i)
-		require.EqualValues(t, expectData[offset:offset+stepBuf], buf)
-		offset += stepBuf
-	}
+//nolint:unparam
+func verifyCryptoRead(t *testing.T, r *CryptoStreamReader, stepNonce, stepBuf, nl, l int, expectData, expectHash []byte) {
+	verifyCryptoReadOnce(t, r, stepNonce, nl, expectData)
+
+	verifyCryptoReadOnce(t, r, stepBuf, l, expectData[nl:])
+
+	require.EqualValues(t, r.GetHash(), expectHash)
 }
 
 func TestCryptoStreamReaderBasic(t *testing.T) {
@@ -51,6 +66,11 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 		}
 		data[i] = byte(i)
 	}
+
+	h := sha256.New()
+	h.Write(nonce)
+	h.Write(data)
+	expectHash := h.Sum(nil)
 
 	buf := bytes.NewBuffer(data)
 	r := NewCryptoStreamReader(buf, nonce, nil)
@@ -67,22 +87,40 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 	require.EqualValues(t, n, l)
 	require.EqualValues(t, data, testBuffer[:n])
 
-	// more complex test
+	require.EqualValues(t, r.GetHash(), expectHash)
+
+	// even step read
 	// reset buffer
 	buf = bytes.NewBuffer(data)
 	r = NewCryptoStreamReader(buf, nonce, nil)
 	// try small buffer
-	verifyCryptWriterRead(t, r, 2, 2, nl, l, append(nonce, data...))
+	verifyCryptoRead(t, r, 2, 2, nl, l, append(nonce, data...), expectHash)
 
 	buf = bytes.NewBuffer(data)
 	r = NewCryptoStreamReader(buf, nonce, nil)
 	// different buffer
-	verifyCryptWriterRead(t, r, nl/2, l/2, nl, l, append(nonce, data...))
+	verifyCryptoRead(t, r, nl/2, l/2, nl, l, append(nonce, data...), expectHash)
 
 	buf = bytes.NewBuffer(data)
 	r = NewCryptoStreamReader(buf, nonce, nil)
 	// first read is small buffer, and big buffer at succeeding
-	verifyCryptWriterRead(t, r, nl/2, l, nl, l, append(nonce, data...))
+	verifyCryptoRead(t, r, nl/2, l, nl, l, append(nonce, data...), expectHash)
+
+	// more complex test. return buffer is different
+	// case 1: verify the length of read buffer > 1/2*l, but < l
+	buf = bytes.NewBuffer(data)
+	r = NewCryptoStreamReader(buf, nonce, nil)
+	verifyCryptoRead(t, r, nl/2+1, l, nl, l, append(nonce, data...), expectHash)
+
+	// case 2: verify the length of read buffer > 1/2*nl, but < nl
+	buf = bytes.NewBuffer(data)
+	r = NewCryptoStreamReader(buf, nonce, nil)
+	verifyCryptoRead(t, r, nl, l/2+1, nl, l, append(nonce, data...), expectHash)
+
+	// case 3: each step is half plus 1
+	buf = bytes.NewBuffer(data)
+	r = NewCryptoStreamReader(buf, nonce, nil)
+	verifyCryptoRead(t, r, nl/2+1, l/2+1, nl, l, append(nonce, data...), expectHash)
 }
 
 func TestCryptoStream(t *testing.T) {
