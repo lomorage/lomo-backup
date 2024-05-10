@@ -37,6 +37,7 @@ func uploadFiles(ctx *cli.Context) error {
 	client, err := gcloud.CreateDriveClient(&gcloud.Config{
 		CredFilename:  ctx.String("cred"),
 		TokenFilename: ctx.String("token"),
+		RefreshToken:  true,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to retrieve Drive client: %v", err)
