@@ -16,12 +16,12 @@ var listFilesNotInIsoOrCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f
 	" order by f.dir_id, f.id"
 
 const (
-	listFilesNotInIsoAndCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.mod_time from files as f" +
+	listFilesNotInIsoAndCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.hash, f.mod_time from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
-	getTotalFileSizeNotInIsoStmt = "select sum(size) from files where iso_id=0"
-	getTotalFilesInIsoStmt       = "select sum(size), count(size) from files where iso_id=?"
-	updateBatchFilesIsoIDStmt    = "update files set iso_id=%d where id in (%s)"
-	updateFileIsoIDStmt          = "update files set iso_id=? where id=?"
+	getTotalFileSizeNotInIsoStmt  = "select sum(size) from files where iso_id=0"
+	getTotalFilesInIsoStmt        = "select sum(size), count(size) from files where iso_id=?"
+	updateBatchFilesIsoIDStmt     = "update files set iso_id=%d where id in (%s)"
+	updateFileIsoIDAndEncHashStmt = "update files set iso_id=?, hash_enc=? where id=?"
 
 	getIsoByNameStmt = "select id, size, hash_hex, hash_base64, region, bucket, upload_id, upload_key," +
 		" create_time from isos where name=?"
@@ -54,7 +54,7 @@ func (db *DB) ListFilesNotInISOAndCloud() ([]*types.FileInfo, error) {
 			for rows.Next() {
 				var path, name string
 				f := &types.FileInfo{}
-				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size, &f.ModTime)
+				err = rows.Scan(&f.DirID, &path, &name, &f.ID, &f.Size, &f.Hash, &f.ModTime)
 				if err != nil {
 					return err
 				}
@@ -197,10 +197,10 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 	return int(isoID), int(updatedFiles), err
 }
 
-func (db *DB) UpdateFileIsoID(isoID, fileID int) error {
+func (db *DB) UpdateFileIsoIDAndEncHash(isoID, fileID int, encryptedHash string) error {
 	return db.retryIfLocked(fmt.Sprintf("file %d's iso ID %d", fileID, isoID),
 		func(tx *sql.Tx) error {
-			_, err := tx.Exec(updateFileIsoIDStmt, isoID, fileID)
+			_, err := tx.Exec(updateFileIsoIDAndEncHashStmt, isoID, encryptedHash, fileID)
 			return err
 		},
 	)

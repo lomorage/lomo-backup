@@ -21,16 +21,11 @@ type Config struct {
 	TokenFilename string
 }
 
-type FileMetadata struct {
-	Hash    string
-	ModTime time.Time
-}
-
-type Client struct {
+type DriveClient struct {
 	srv *drive.Service
 }
 
-func CreateClient(conf *Config) (*Client, error) {
+func CreateDriveClient(conf *Config) (*DriveClient, error) {
 	ctx := context.Background()
 	b, err := os.ReadFile(conf.CredFilename)
 	if err != nil {
@@ -48,13 +43,22 @@ func CreateClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cli := &Client{}
+	cli := &DriveClient{}
 
 	cli.srv, err = drive.NewService(ctx, option.WithHTTPClient(config.Client(ctx, token)))
 	return cli, err
 }
 
-func (c *Client) GetFileID(filename, parentFolderID string) (string, string, error) {
+func (c *DriveClient) GetFile(fileID string) (io.ReadCloser, error) {
+	f, err := c.srv.Files.Get(fileID).Download()
+	if err != nil {
+		return nil, err
+	}
+
+	return f.Body, nil
+}
+
+func (c *DriveClient) GetFileID(filename, parentFolderID string) (string, string, error) {
 	query := fmt.Sprintf("name = '%s'", filename)
 	if parentFolderID != "" {
 		query += fmt.Sprintf(" and '%s' in parents", parentFolderID)
@@ -76,14 +80,14 @@ func (c *Client) GetFileID(filename, parentFolderID string) (string, string, err
 	return files.Files[0].Id, parentID, nil
 }
 
-func (c *Client) GetAndCreateFileIDIfNotExist(filename, parentFolderID string, r io.Reader, m FileMetadata) (bool, string, error) {
+func (c *DriveClient) GetAndCreateFileIDIfNotExist(filename, parentFolderID string, r io.Reader, modTime time.Time) (bool, string, error) {
 	fileID, pid, err := c.GetFileID(filename, parentFolderID)
 	if err != nil {
 		return false, "", err
 	}
 	if fileID == "" {
 		// not exist, create new one
-		fileID, err = c.CreateFile(filename, parentFolderID, r, m)
+		fileID, err = c.CreateFile(filename, parentFolderID, r, modTime)
 		return false, fileID, err
 	}
 	if parentFolderID != "" && pid != parentFolderID {
@@ -92,16 +96,12 @@ func (c *Client) GetAndCreateFileIDIfNotExist(filename, parentFolderID string, r
 	return true, fileID, nil
 }
 
-func (c *Client) CreateFile(filename, parentFolderID string, r io.Reader, m FileMetadata) (string, error) {
+func (c *DriveClient) CreateFile(filename, parentFolderID string, r io.Reader, modTime time.Time) (string, error) {
 	file := &drive.File{
 		Name:        filename,
-		CreatedTime: m.ModTime.Format(time.RFC3339),
+		CreatedTime: modTime.Format(time.RFC3339),
 	}
-	if m.Hash != "" {
-		file.AppProperties = map[string]string{
-			"hash": m.Hash,
-		}
-	}
+
 	if parentFolderID != "" {
 		file.Parents = []string{parentFolderID}
 	}
@@ -121,9 +121,29 @@ func (c *Client) CreateFile(filename, parentFolderID string, r io.Reader, m File
 	return f.Id, nil
 }
 
-func (c *Client) ListFiles(folderID string) ([]*types.DirInfo, []*types.FileInfo, error) {
+func (c *DriveClient) UpdateFileMetadata(fileID string, metadata map[string]string) error {
+	file, err := c.srv.Files.Get(fileID).Fields("appProperties").Do()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve file metadata: %v", err)
+	}
+
+	// Update the AppProperties
+	file.AppProperties = metadata
+
+	// Call the update method with modified metadata
+	updatedFile, err := c.srv.Files.Update(fileID, file).Fields("id, name, appProperties").Do()
+	if err != nil {
+		return fmt.Errorf("failed to update file metadata: %v", err)
+	}
+
+	fmt.Printf("--- %+v\n", updatedFile)
+
+	return nil
+}
+
+func (c *DriveClient) ListFiles(folderID string) ([]*types.DirInfo, []*types.FileInfo, error) {
 	query := fmt.Sprintf("'%s' in parents", folderID)
-	list, err := c.srv.Files.List().Q(query).Fields("files(id, name, size, mimeType, createdTime)").Do()
+	list, err := c.srv.Files.List().Q(query).Fields("files(id, name, size, mimeType, createdTime, appProperties)").Do()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -143,12 +163,17 @@ func (c *Client) ListFiles(folderID string) ([]*types.DirInfo, []*types.FileInfo
 			})
 			continue
 		}
-		files = append(files, &types.FileInfo{
+		fi := &types.FileInfo{
 			RefID:   f.Id,
 			Name:    f.Name,
 			Size:    int(f.Size),
 			ModTime: t,
-		})
+		}
+		if f.AppProperties != nil {
+			fi.Hash = f.AppProperties[types.MetadataKeyHashOrig]
+			fi.HashEncrypt = f.AppProperties[types.MetadataKeyHashEncrypt]
+		}
+		files = append(files, fi)
 	}
 	return folders, files, nil
 }

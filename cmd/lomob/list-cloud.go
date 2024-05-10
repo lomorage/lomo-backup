@@ -10,7 +10,7 @@ import (
 )
 
 func listFilesInGDrive(ctx *cli.Context) error {
-	client, err := gcloud.CreateClient(&gcloud.Config{
+	client, err := gcloud.CreateDriveClient(&gcloud.Config{
 		CredFilename:  ctx.String("cred"),
 		TokenFilename: ctx.String("token"),
 	})
@@ -39,7 +39,7 @@ func listFilesInGDrive(ctx *cli.Context) error {
 	return nil
 }
 
-func listFileTreeInGDrive(client *gcloud.Client, currNode treeprint.Tree, folderID string) error {
+func listFileTreeInGDrive(client *gcloud.DriveClient, currNode treeprint.Tree, folderID string) error {
 	folders, files, err := client.ListFiles(folderID)
 	if err != nil {
 		return err
@@ -56,8 +56,17 @@ func listFileTreeInGDrive(client *gcloud.Client, currNode treeprint.Tree, folder
 	}
 	for _, file := range files {
 		t := file.ModTime
-		currNode.AddMetaNode(fmt.Sprintf("\t%12s\t%02d/%02d/%d", strconv.Itoa(file.Size),
-			t.Month(), t.Day(), t.Year()), file.Name)
+		hashOrigin := file.Hash
+		if len(hashOrigin) > 6 {
+			hashOrigin = hashOrigin[:6]
+		}
+
+		hashEncrypt := file.HashEncrypt
+		if len(hashEncrypt) > 6 {
+			hashEncrypt = hashEncrypt[:6]
+		}
+		currNode.AddMetaNode(fmt.Sprintf("\t%12s\t%02d/%02d/%d\t%s\t%s", strconv.Itoa(file.Size),
+			t.Month(), t.Day(), t.Year(), hashOrigin, hashEncrypt), file.Name)
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
@@ -17,6 +18,29 @@ import (
 var (
 	ch chan string
 )
+
+func RefreshAccessToken(conf *Config) (*oauth2.Token, error) {
+	ctx := context.Background()
+	b, err := os.ReadFile(conf.CredFilename)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read client secret file: %v", err)
+	}
+
+	// If modifying these scopes, delete your previously saved token.json.
+	config, err := google.ConfigFromJSON(b, drive.DriveScope)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse client secret file to config: %v", err)
+	}
+
+	token, err := tokenFromFile(conf.TokenFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	oauthClient := config.TokenSource(ctx, token)
+
+	return oauthClient.Token()
+}
 
 func AuthHelper(redirectPath string, redirectPort int, conf *Config) error {
 	ch = make(chan string)
@@ -42,10 +66,13 @@ func AuthHelper(redirectPath string, redirectPort int, conf *Config) error {
 		return fmt.Errorf("unable to parse client secret file to config: %v", err)
 	}
 
-	_, err = tokenFromFile(conf.TokenFilename)
+	token, err := tokenFromFile(conf.TokenFilename)
 	if err == nil {
-		fmt.Println("Token file exists already. Skip")
-		return nil
+		if token.Expiry.After(time.Now()) {
+			fmt.Println("Token file exists already. Skip")
+			return nil
+		}
+		fmt.Printf("Token expired at %s, renew now\n", token.Expiry)
 	}
 
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
@@ -55,14 +82,14 @@ func AuthHelper(redirectPath string, redirectPort int, conf *Config) error {
 	authCode := <-ch
 
 	fmt.Printf("Start exchange: %s\n", authCode)
-	token, err := config.Exchange(context.Background(), authCode)
+	token, err = config.Exchange(context.Background(), authCode)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("Exchange success, saving token into %s\n", conf.TokenFilename)
 
-	return saveToken(conf.TokenFilename, token)
+	return SaveToken(conf.TokenFilename, token)
 }
 
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +116,7 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) error {
+func SaveToken(path string, token *oauth2.Token) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
