@@ -6,6 +6,8 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,8 +74,9 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 	h.Write(data)
 	expectHash := h.Sum(nil)
 
-	buf := bytes.NewBuffer(data)
-	r := NewCryptoStreamReader(buf, nonce, nil)
+	buf := bytes.NewReader(data)
+	r, err := NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 
 	// normal read
 	testBuffer := make([]byte, l+1)
@@ -91,35 +94,41 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 
 	// even step read
 	// reset buffer
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	// try small buffer
 	verifyCryptoRead(t, r, 2, 2, nl, l, append(nonce, data...), expectHash)
 
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	// different buffer
 	verifyCryptoRead(t, r, nl/2, l/2, nl, l, append(nonce, data...), expectHash)
 
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	// first read is small buffer, and big buffer at succeeding
 	verifyCryptoRead(t, r, nl/2, l, nl, l, append(nonce, data...), expectHash)
 
 	// more complex test. return buffer is different
 	// case 1: verify the length of read buffer > 1/2*l, but < l
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	verifyCryptoRead(t, r, nl/2+1, l, nl, l, append(nonce, data...), expectHash)
 
 	// case 2: verify the length of read buffer > 1/2*nl, but < nl
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	verifyCryptoRead(t, r, nl, l/2+1, nl, l, append(nonce, data...), expectHash)
 
 	// case 3: each step is half plus 1
-	buf = bytes.NewBuffer(data)
-	r = NewCryptoStreamReader(buf, nonce, nil)
+	buf = bytes.NewReader(data)
+	r, err = NewCryptoStreamReader(buf, nonce, nil)
+	require.Nil(t, err)
 	verifyCryptoRead(t, r, nl/2+1, l/2+1, nl, l, append(nonce, data...), expectHash)
 }
 
@@ -139,9 +148,9 @@ func TestCryptoStream(t *testing.T) {
 
 	stream := getCryptoStream(t, key, nonce)
 
-	buf := bytes.NewBuffer(data)
-
-	r := NewCryptoStreamReader(buf, nonce, stream)
+	buf := bytes.NewReader(data)
+	r, err := NewCryptoStreamReader(buf, nonce, stream)
+	require.Nil(t, err)
 
 	// normal read
 	testBuffer := make([]byte, l+1)
@@ -170,4 +179,131 @@ func TestCryptoStream(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, l, n)
 	require.EqualValues(t, data, bufWrite.Bytes())
+}
+
+func TestCryptoStreamReaderSeek(t *testing.T) {
+	nl := 16
+	nonce := make([]byte, nl)
+	for i := 0; i < nl; i++ {
+		nonce[i] = byte(i)
+	}
+
+	f, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer f.Close()
+
+	key, _ := hex.DecodeString("6368616e676520746869732070617373")
+
+	stream := getCryptoStream(t, key, nonce)
+
+	r, err := NewCryptoStreamReader(f, nonce, stream)
+	require.Nil(t, err)
+
+	testReadSeekerSeek(t, r)
+}
+
+func TestCryptoStreamReaderSeekReadNoEncrypt(t *testing.T) {
+	nl := 16
+	nonce := make([]byte, nl)
+	for i := 0; i < nl; i++ {
+		nonce[i] = byte(i)
+	}
+
+	f, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer f.Close()
+
+	r, err := NewCryptoStreamReader(f, nonce, nil)
+	require.Nil(t, err)
+
+	expectFile, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer expectFile.Close()
+
+	// initial read will return nonce
+	buf := make([]byte, 200)
+	n, err := r.Read(buf)
+	require.Nil(t, err)
+	require.EqualValues(t, len(nonce), n)
+	require.EqualValues(t, nonce, buf[:n])
+
+	// read from current
+	verifyReadSeek(t, expectFile, r, 500, 500, 500, io.SeekCurrent)
+	verifyReadSeek(t, expectFile, r, 400, -400, -400, io.SeekCurrent)
+
+	// read from end
+	verifyReadSeek(t, expectFile, r, 100, -100, -100, io.SeekEnd)
+	verifyReadSeek(t, expectFile, r, 100, -200, -200, io.SeekEnd)
+
+	// now read until end
+	verifyReadSeek(t, expectFile, r, 101, -1, -1, io.SeekCurrent)
+}
+
+func verifyCryptoStreamRead(t *testing.T, expectReader, reader io.Reader, len int, stream cipher.Stream) {
+	expectBuffer := make([]byte, len)
+	tmpBuffer := make([]byte, len)
+	expectSize, err := expectReader.Read(tmpBuffer)
+	require.Nil(t, err)
+	stream.XORKeyStream(expectBuffer, tmpBuffer)
+
+	buffer := make([]byte, len)
+	size, err := reader.Read(buffer)
+	require.Nil(t, err, "read lengh: %d", size)
+
+	require.Equal(t, expectSize, size)
+	require.Equal(t, expectBuffer, buffer)
+}
+
+func verifyCryptoReadSeek(t *testing.T, expectReadSeeker, readSeeker io.ReadSeeker,
+	len, expectOffset, offset, whence int, stream cipher.Stream) {
+	_, err := expectReadSeeker.Seek(int64(expectOffset), whence)
+	require.Nil(t, err)
+
+	_, err = readSeeker.Seek(int64(offset), whence)
+	require.Nil(t, err)
+
+	verifyCryptoStreamRead(t, expectReadSeeker, readSeeker, len, stream)
+}
+
+func TestCryptoStreamReaderSeekReadEncrypt(t *testing.T) {
+	nl := 16
+	nonce := make([]byte, nl)
+	for i := 0; i < nl; i++ {
+		nonce[i] = byte(i)
+	}
+
+	f, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer f.Close()
+
+	key, _ := hex.DecodeString("6368616e676520746869732070617373")
+
+	stream := getCryptoStream(t, key, nonce)
+
+	r, err := NewCryptoStreamReader(f, nonce, stream)
+	require.Nil(t, err)
+
+	expectFile, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer expectFile.Close()
+
+	// initial read will return nonce
+	buf := make([]byte, 200)
+	n, err := r.Read(buf)
+	require.Nil(t, err)
+	require.EqualValues(t, len(nonce), n)
+	require.EqualValues(t, nonce, buf[:n])
+
+	expectStream := getCryptoStream(t, key, nonce)
+
+	// read from current
+	verifyCryptoReadSeek(t, expectFile, r, 500, 500, 500, io.SeekCurrent, expectStream)
+	verifyCryptoReadSeek(t, expectFile, r, 400, -400, -400, io.SeekCurrent, expectStream)
+
+	// read from end
+	verifyCryptoReadSeek(t, expectFile, r, 100, -100, -100, io.SeekEnd, expectStream)
+	verifyCryptoReadSeek(t, expectFile, r, 100, -200, -200, io.SeekEnd, expectStream)
+
+	// now read until end
+	verifyCryptoReadSeek(t, expectFile, r, 101, -1, -1, io.SeekCurrent, expectStream)
 }

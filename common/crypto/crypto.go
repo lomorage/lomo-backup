@@ -22,15 +22,15 @@ func newCipherStream(key, iv []byte) (cipher.Stream, error) {
 }
 
 // Encrytor wrap io.CryptStreamReader and create ciper.Stream automatically
-func NewEncryptor(r io.Reader, key, iv []byte) (*Encryptor, error) {
+func NewEncryptor(r io.ReadSeeker, key, iv []byte) (*Encryptor, error) {
 	stream, err := newCipherStream(key, iv)
 	if err != nil {
 		return nil, err
 	}
 
 	en := &Encryptor{}
-	en.sreader = lomoio.NewCryptoStreamReader(r, iv, stream)
-	return en, nil
+	en.sreader, err = lomoio.NewCryptoStreamReader(r, iv, stream)
+	return en, err
 }
 
 func (e *Encryptor) Read(p []byte) (int, error) {

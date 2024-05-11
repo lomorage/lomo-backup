@@ -125,7 +125,7 @@ func (prs *FilePartReadSeeker) Seek(offset int64, whence int) (n int64, err erro
 			prs.current = prs.start
 			return
 		}
-		n, err = prs.f.Seek(prs.start-offset, io.SeekStart)
+		n, err = prs.f.Seek(prs.end+offset, io.SeekStart)
 	default:
 		return 0, fmt.Errorf("not implemented")
 	}

@@ -73,7 +73,7 @@ Also welcome to try our free Photo backup applications. https://lomorage.com.
 - Resume upload if one part was fail
 - Checksum validation during upload
 - Self define iso size
-- Encryption all files before upload
+- On the fly encryption all files as iso file size may be big, and we want to avoid intermittent file in order to save time and not require extra disks
 
 # Security Model
 The security model is from repository [filecrypt](https://github.com/kisom/filecrypt). Refer book [Practical Cryptography With Go](https://leanpub.com/gocrypto/read) for more detail.

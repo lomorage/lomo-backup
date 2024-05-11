@@ -11,10 +11,10 @@ import (
 const testFilename = "../testdata/indepedant_declaration.txt"
 
 // hex hash is calculated by "sha256sum indepedant_declaration.txt"
-const expectHexHash = "4cfd75f4c8aa09ff1992e493999fd1c0333da4393fffd9d207b60c6dc2516263"
+const expectHexHash = "0b23088dc0b10a331b3dd03fed7c35422adec44fc937792958cfe784316fc1c2"
 
 // base64 hash is calculated by "cat indepedant_declaration.txt | openssl dgst -binary -sha256 | openssl base64 -A"
-const expectBase64Hash = "TP119MiqCf8ZkuSTmZ/RwDM9pDk//9nSB7YMbcJRYmM="
+const expectBase64Hash = "CyMIjcCxCjMbPdA/7Xw1QirexE/JN3kpWM/nhDFvwcI="
 
 // split file using command "split --bytes=1000 --numeric-suffixes=1 --suffix-length=1 ./indepedant_declaration.txt test"
 // for i in `seq 1 9`; do sha256sum test$i; done | awk -F' ' '{print $1}'
@@ -27,7 +27,7 @@ var expectHexHashMultiparts = []string{
 	"5d350af5e1f3e149e1f6cefe595e18a71951b306f00ef304177b7999745f4c3b",
 	"42664de22a93b15140c8e882f7d5deb9a5fb29e937e6c0bef81fedea50a250f9",
 	"a5747c2ec4cedc33709a361318ddf658a5afa7a12c889e7315bf0adaa82c0086",
-	"eb05dc46b7f61ed556a96ee44fd68e5ebe8012926901c56c5578b7f363134360",
+	"66855ea046419f3a998088a6d7b74207a9224c8751910c48f66480c2649b315a",
 }
 
 // for i in `seq 1 9`; do cat test$i | openssl dgst -binary -sha256 | openssl base64 -A; echo;done
@@ -40,7 +40,7 @@ var expectBase64HashMultiparts = []string{
 	"XTUK9eHz4Unh9s7+WV4YpxlRswbwDvMEF3t5mXRfTDs=",
 	"QmZN4iqTsVFAyOiC99XeuaX7Kek35sC++B/t6lCiUPk=",
 	"pXR8LsTO3DNwmjYTGN32WKWvp6EsiJ5zFb8K2qgsAIY=",
-	"6wXcRrf2HtVWqW7kT9aOXr6AEpJpAcVsVXi382MTQ2A=",
+	"ZoVeoEZBnzqZgIim17dCB6kiTIdRkQxI9mSAwmSbMVo=",
 }
 
 func TestCalculateHash(t *testing.T) {
