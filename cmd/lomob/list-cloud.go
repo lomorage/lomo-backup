@@ -28,8 +28,6 @@ func listFilesInGDrive(ctx *cli.Context) error {
 	if folderID == "" {
 		fmt.Printf("Folder '%s' not found.\n", folder)
 		return nil
-	} else {
-		fmt.Printf("File Name: %s, File ID: %s\n", folder, folderID)
 	}
 	rootNode := treeprint.NewWithRoot(folder)
 	err = listFileTreeInGDrive(client, rootNode, folderID)

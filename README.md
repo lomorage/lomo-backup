@@ -150,7 +150,7 @@ To authenticate end users and access user data in your app, you need to create o
 Note that the redirect_uris in `gdrive-credentials.json` are `http://localhost`. I can not find any places to change it, so our app will use it as default.
 
 ### Get access token
-`lomo-backup`` app has one command to get token. Its usage is as below 
+`lomo-backup`` app has one command utility to get token. Its usage is as below 
 ```
 $  ./lomob util gcloud-auth --help
 NAME:
@@ -187,7 +187,140 @@ Exchange success, saving token into gdrive-token.json
 
 Once you get token, you can verify if it works or not via `./lomob list gdrive`
 
-# Usage
+# Tutorial
+The basic workflow is simple: 1. scan, 2. pack ISO, 3. upload ISO or files. Anytime you can list remote directories in cloud in tree view, and download and restore them.
+## 1. Scan
+
+Specify one starting folder to scan. Files under the directories will be added into a sqlite db. For example, `lomob scan /home/scan/workspace/golang/src/lomorage/lomo-backup`. `--ignore-files` and `--ignore-dirs` will skip the specified files and directories.
+```
+$ lomob scan -h
+NAME:
+   lomob scan - Scan all files under given directory
+
+USAGE:
+   lomob scan [command options] [directory to scan]
+
+OPTIONS:
+   --ignore-files value, --if value  List of ignored files, separated by comma (default: ".DS_Store,._.DS_Store,Thumbs.db")
+   --ignore-dirs value, --in value   List of ignored directories, separated by comma (default: ".idea,.git,.github")
+   --threads value, -t value         Number of scan threads in parallel (default: 20)
+```
+
+## 2. Pack ISO
+`lomob iso create` will automatically pack all files into ISOs. If total size of files are beyond iso size, it will recreate a new ISO file and continue packing process. Default ISO size is 5G, but you can specify your own.
+```
+$ lomob iso create -h
+NAME:
+   lomob iso create - Group scanned files and make iso
+
+USAGE:
+   lomob iso create [command options] [iso filename. if empty, filename will be <oldest file name>--<latest filename>.iso]
+
+OPTIONS:
+   --iso-size value, -s value   Size of each ISO file. KB=1000 Byte (default: "5G")
+   --store-dir value, -p value  Directory to store the ISOs. It's urrent directory by default
+```
+
+## 3. Upload
+
+Note that the name of first folder under given bucket is the scan root directory whose name made by this formular:
+- split the full path into different parts
+- rejoin all parts with `_`
+- for example, if scan root directory full path is `/home/scan/workspace/golang/src/lomorage/lomo-backup`, the folder name will be `home_scan_workspace_golang_src_lomorage_lomo-backup`
+
+### 3.1 Upload ISOs to AWS
+You can either specify which iso to upload
+
+
+### 3.2 Upload files not packaged in ISOs to google drive
+
+
+## 4. List
+### 4.1 List scanned directory
+
+```
+$ ./lomob list dirs -h
+NAME:
+   lomob list dirs - List all scanned directories
+```
+
+### 4.2 List big files scanned currently
+```
+$ ./lomob list bigfiles -h
+NAME:
+   lomob list bigfiles - List big files
+
+USAGE:
+   lomob list bigfiles [command options] [arguments...]
+
+OPTIONS:
+   --file-size value, -s value  Minimum file size in the list result. KB=1000 Byte (default: "50MB")
+```
+
+### 4.3 List created ISOs
+This command list all created isos, and also display their current status, uploaded or not, upload success or failed, etc
+```
+$ lomob list iso -h
+NAME:
+   lomob iso list - List all created iso files
+
+$ lomob list iso
+[0xc000415ea0 0xc000415f10]
+ID    Name                          Size       Status                   Region    Bucket    Files Count    Create Time            Hash
+1     2024-04-13--2024-04-20.iso    21.9 MB    Uploaded                 us-east-1 lomorage  7              2024-04-20 20:53:31    d5cd6b88e766d417995f715ddc03dd19450f74ecee9b2d6804d1e7c55559fb81
+2     2024-04-11--2024-04-20.iso    14.0 MB    Created, not uploaded                        290            2024-04-20 20:53:32    b5474aeaacd7cd5fea0f41ba4ed18b298224031ff5ff008b9ff5a25fdcaea2b2
+```
+
+### 4.3 List files in one ISOs
+You can list all files in one ISO in tree view
+```
+$ lomob iso dump 2024-04-13--2024-04-28.iso
+/
+├── [   04/20/2024]  clients
+│   └── [               6900    04/27/2024]  upload.go
+├── [   04/28/2024]  cmd
+│   └── [       04/28/2024]  lomob
+│       ├── [           6340    04/28/2024]  iso.go
+│       ├── [           4270    04/24/2024]  list.go
+│       └── [       24584368    04/28/2024]  lomob
+├── [            915    04/26/2024]  go.mod
+├── [           4407    04/26/2024]  go.sum
+├── [           7450    04/23/2024]  README.md
+└── [            506    04/13/2024]  gitignore
+```
+### 4.4 List files not in any isos
+This command is to list which files not packed into ISOs, and also show if it is uploaded in cloud or not
+```
+$ lomob list files
+In Cloud    Path
+Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/common/testdata/indepedant_declaration.txt
+Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/vendor/github.com/aws/aws-sdk-go/private/protocol/eventstream/debug.go
+Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/vendor/golang.org/x/sys/windows/types_windows_arm.go
+Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/vendor/golang.org/x/sys/windows/types_windows_arm64.go```
+```
+
+### 4.5 List files in google drive
+You can run below command to list directories in tree view in google drive. It has 4 fields in front of each file name: 
+- file size in Byte
+- file mod time get through os.Stat.ModTime
+- first 6 letters of file original sha256 hash
+- first 6 letters of encrypted file sha256 hash
+
+```
+$ lomob list gdrive
+lomorage
+└── [   05/03/2024]  home_scan_workspace_golang_src_lomorage_lomo-backup
+    └── [       05/09/2024]  common
+        └── [   04/26/2024]  testdata
+            ├── [               8163    04/26/2024      4cfd75  be28f7]  indepedant_declaration.txt
+```
+
+You can also restore any files
+### 5. Restore
+### 5.1 Restore files in google drive
+### 5.2 Restore isos in AWS S3
+
+# Other Util Commands
 ## Overall options and sub commands
 
 ```
@@ -204,7 +337,10 @@ AUTHOR:
 COMMANDS:
    scan     Scan all files under given directory
    iso      ISO related commands
+   upload   Upload packed ISO files or individual files
+   restore  Restore encrypted files cloud
    list     List scanned files related commands
+   util     Various tools
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
@@ -212,72 +348,5 @@ GLOBAL OPTIONS:
    --log-level value, -l value  Log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel (default: 4)
    --help, -h                   show help
 ```
-## Scan related
-### Scan given directory
-
-```
-$ ./lomob scan --help
-NAME:
-   lomob scan - Scan all files under given directory
-
-USAGE:
-   lomob scan [command options] [directory to scan]
-
-OPTIONS:
-   --ignore-files value, --if value  List of ignored files, seperated by comman (default: ".DS_Store,._.DS_Store,Thumbs.db")
-   --ignore-dirs value, --in value   List of ignored directories, seperated by comman (default: ".idea,.git,.github")
-   --threads value, -t value         Number of scan threads in parallel (default: 20)
-```
-### List scanned directory
-
-```
-$ ./lomob list dirs -h
-NAME:
-   lomob list dirs - List all scanned directories
-```
-
-### List big files scanned currently
-```
-$ ./lomob list bigfiles -h
-NAME:
-   lomob list bigfiles - List big files
-
-USAGE:
-   lomob list bigfiles [command options] [arguments...]
-
-OPTIONS:
-   --file-size value, -s value  Minimum file size in the list result. KB=1000 Byte (default: "50MB")
-```
-
-## ISO related
-### Create ISO
-
-```
-$ ./lomob iso create -h
-NAME:
-   lomob iso create - Group scanned files and make iso
-
-USAGE:
-   lomob iso create [command options] [iso filename. if empty, filename will be <oldest file name>--<latest filename>.iso]
-
-OPTIONS:
-   --iso-size value, -s value  Size of each ISO file. KB=1000 Byte (default: "5GB")
-```
-
-### List created ISOs
-```
-$ ./lomob iso list -h
-NAME:
-   lomob iso list - List all created iso files
-
-$ ./lomob iso list
-[0xc000415ea0 0xc000415f10]
-ID    Name                          Size       Status                   Region    Bucket    Files Count    Create Time            Hash
-1     2024-04-13--2024-04-20.iso    21.9 MB    Created, not uploaded                        7              2024-04-20 20:53:31    d5cd6b88e766d417995f715ddc03dd19450f74ecee9b2d6804d1e7c55559fb81
-2     2024-04-11--2024-04-20.iso    14.0 MB    Created, not uploaded                        290            2024-04-20 20:53:32    b5474aeaacd7cd5fea0f41ba4ed18b298224031ff5ff008b9ff5a25fdcaea2b2
-```
-
-### Upload ISO
-
 ## License
 This software is released under GPL-3.0.

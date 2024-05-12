@@ -318,6 +318,11 @@ func main() {
 						},
 					},
 				},
+				{
+					Name:   "isos",
+					Action: listISO,
+					Usage:  "List all created iso files",
+				},
 			},
 		},
 		{
