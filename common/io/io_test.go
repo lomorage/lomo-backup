@@ -10,14 +10,19 @@ import (
 
 const testFilename = "../testdata/indepedant_declaration.txt"
 
+type readSeekSizer interface {
+	io.ReadSeeker
+	Size() int64
+}
+
 func verifySeek(t *testing.T, seeker io.Seeker, offset, expectPosition int64,
 	whence int) {
 	n, err := seeker.Seek(offset, whence)
 	require.Nil(t, err)
-	require.Equal(t, expectPosition, n)
+	require.Equal(t, expectPosition, n, "offset: %d, whence: %d", offset, whence)
 }
 
-func testFilePartReadSeekerSeek(t *testing.T, prs *FilePartReadSeeker) {
+func testReadSeekerSeek(t *testing.T, prs readSeekSizer) {
 	// this is normal steps to get file length
 	// 1. seek 0 at current, and check current offset
 	// 2. seek 0 from start, and ensure from the beginning
@@ -84,19 +89,11 @@ func TestFilePartReadSeekerSeek(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, int64(0), n)
 
-	// this is normal steps to get file length
-	// 1. seek 0 at current, and check current offset
-	// 2. seek 0 from start, and ensure from the beginning
-	// 3. seek 0 from current, and check if it is also from the beginning
-	// 4. seek 0 from end, and get file length
-	// 5. seek 0 from current, and check if it is same size as step 4
-	// 6. seek 0 from start, and ensure from the beginning
-	// 7. seek 0 from current, and check if it is also from the beginning
-	testFilePartReadSeekerSeek(t, prs)
+	testReadSeekerSeek(t, prs)
 
 	// create another seeker in the middle, but reuse current position
 	prs = NewFilePartReadSeeker(fpart, 1000, 2000)
-	testFilePartReadSeekerSeek(t, prs)
+	testReadSeekerSeek(t, prs)
 
 	// create the 3rd seeker in the middle, and seek original file to the beginning
 	// above steps should have same result
@@ -105,7 +102,7 @@ func TestFilePartReadSeekerSeek(t *testing.T) {
 	require.Equal(t, int64(0), n)
 
 	prs = NewFilePartReadSeeker(fpart, 2000, 3000)
-	testFilePartReadSeekerSeek(t, prs)
+	testReadSeekerSeek(t, prs)
 }
 
 func verifyRead(t *testing.T, expectReader, reader io.Reader, len int) {
@@ -115,7 +112,7 @@ func verifyRead(t *testing.T, expectReader, reader io.Reader, len int) {
 
 	buffer := make([]byte, len)
 	size, err := reader.Read(buffer)
-	require.Nil(t, err)
+	require.Nil(t, err, "read lengh: %d", size)
 
 	require.Equal(t, expectSize, size)
 	require.Equal(t, expectBuffer, buffer)
@@ -161,6 +158,10 @@ func TestFilePartReadSeekerReadSeek(t *testing.T) {
 	require.Nil(t, err)
 	defer expectFile.Close()
 
+	stat, err := expectFile.Stat()
+	require.Nil(t, err)
+	size := int(stat.Size())
+
 	fpart, err := os.Open(testFilename)
 	require.Nil(t, err)
 	defer fpart.Close()
@@ -170,7 +171,44 @@ func TestFilePartReadSeekerReadSeek(t *testing.T) {
 	verifyReadSeek(t, expectFile, prs, 500, 500, 500, io.SeekStart)
 	verifyReadSeek(t, expectFile, prs, 500, -500, -500, io.SeekCurrent)
 
+	// read from end
+	seekOffset := 10
+	readerSeekLen := -1 * (1000 - seekOffset)
+	actualFileSeekLen := -1 * (size - seekOffset)
+	verifyReadSeek(t, expectFile, prs, 100, actualFileSeekLen, readerSeekLen, io.SeekEnd)
+
+	seekOffset = 800
+	readerSeekLen = -1 * (1000 - seekOffset)
+	actualFileSeekLen = -1 * (size - seekOffset)
+	verifyReadSeek(t, expectFile, prs, 100, actualFileSeekLen, readerSeekLen, io.SeekEnd)
+
+	// now read until end
+	verifyReadSeek(t, expectFile, prs, 101, -1, -1, io.SeekCurrent)
+
+	// next read should be EOF
+	buf := make([]byte, 2)
+	_, err = prs.Read(buf)
+	require.EqualValues(t, io.EOF, err)
+
 	prs = NewFilePartReadSeeker(fpart, 1000, 2000)
 	verifyReadSeek(t, expectFile, prs, 500, 1500, 500, io.SeekStart)
 	verifyReadSeek(t, expectFile, prs, 400, -500, -500, io.SeekCurrent)
+
+	// read from end
+	seekOffset = 10
+	readerSeekLen = -1 * (1000 - seekOffset)
+	actualFileSeekLen = -1 * (size - 1000 - seekOffset)
+	verifyReadSeek(t, expectFile, prs, 100, actualFileSeekLen, readerSeekLen, io.SeekEnd)
+
+	seekOffset = 800
+	readerSeekLen = -1 * (1000 - seekOffset)
+	actualFileSeekLen = -1 * (size - 1000 - seekOffset)
+	verifyReadSeek(t, expectFile, prs, 100, actualFileSeekLen, readerSeekLen, io.SeekEnd)
+
+	// now read until end
+	verifyReadSeek(t, expectFile, prs, 101, -1, -1, io.SeekCurrent)
+
+	// next read should be EOF
+	_, err = prs.Read(buf)
+	require.EqualValues(t, io.EOF, err)
 }

@@ -45,7 +45,7 @@ func testEncryptDecrypt(t *testing.T, plaintext []byte) {
 
 	expectHash := genExpectHash(t, plaintext, key, iv)
 
-	buf := bytes.NewBuffer(plaintext)
+	buf := bytes.NewReader(plaintext)
 	en, err := NewEncryptor(buf, key, iv)
 	require.Nil(t, err)
 
