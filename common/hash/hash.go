@@ -24,7 +24,7 @@ func CalculateHashBytes(buffer []byte) []byte {
 	return h.Sum(nil)
 }
 
-func CalculateHash(path string) ([]byte, error) {
+func CalculateHashFile(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

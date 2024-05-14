@@ -6,15 +6,18 @@
 # Motivation
 Photos/videos are very import personal assets and we want to store in our home instead of clouds. We developped lomorage application to self host our own google photo alternative solutions, which has met our main goal.
 
-At the same time, backup is extremely important as we don't want to lost any photos by accident. Current lomorage application can daily backup to another disk, or NAS via rsync, but it is still hosted at home. We want diaster recovery ability. We want to implement a peer backup solution which allows me to back up photos / videos to my parents' or sisters' or brothers' or friends' home, which will be our final goal, but we need a fast reliable way before that solution really works. Seems storing into cloud like Glacier would be one alternative. The solution should meet below requirements:
+At the same time, backup is extremely important as we don't want to lost any photos by accident. Current lomorage application can daily backup to another disk, or NAS via rsync, but it is still hosted at home. We want diaster recovery ability. Thus saving in cloud is natual way. But saving in the cloud is not always safe. Frome time to time, we heard user stored files are lost, so a solution which can run consistent check monthly and send alert if difference is found would be really helpful.
+
+Previously we want to implement a peer backup solution which allows me to back up photos / videos to my parents' or sisters' or brothers' or friends' home, which will be our final goal, but one copy backup is not enough, and cloud storage's SLA should be higher than peer storage, thus the ideal solution should meet below requirements:
 1. price is as cheap as possible
-2. run backup daily
+2. run backup if new files are found
 3. run consistency check monthly and send me alert if cloud version is different from my local version
 4. support multi sites backup
 
+
 As I have local duplicate backup as well, and most time I access photos and videos from local service, so I seldom visit the cloud backup version.
 
-# Cost Analysis
+# Cost Analysis using current backup solution
 Let us calculate the cost using AWS Glacier. As of 2024/4/4
 
 - $0.0036 per GB / Month
@@ -36,10 +39,14 @@ For example, Google drive offers 15G free space, AWS offers 15G free storage, MS
 
 Now we'll do one upload every 5 months. Only 1 API operation is needed, and cost can be ignore.
 
+One note is I like to keep all photos/videos in remote backup when they are packed in ISO even I delete the ones at local because
+1. Photos/videos will not be packed into ISO until total size of unpacked ones reach configured iso size, thus user have time to delete the ones they don't want
+2. Number of deleted ones should not be that big, thus cost should be very small if storing in Glacier
+
 Workflow:
 1. Daily back up to free storage firstly.
 2. When reaching configured disk threshold, archive the files and make into ISO file, save into Glacier, delete backup ones from free storage
-3. one metadata file or sqlite db file specifies which files are in which ISO file, or free storage
+3. One metadata file or sqlite db file specifies which files are in which ISO file, or free storage
 
 Pre-requsition commands:
 - mkisofs: generate iso file

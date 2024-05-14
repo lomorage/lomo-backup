@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -36,6 +37,7 @@ type UploadRequest struct {
 	Key    string
 }
 
+/*
 type UploadClient interface {
 	GetObject(bucket, remotePath string) (*types.ISOInfo, error)
 	PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error
@@ -47,16 +49,17 @@ type UploadClient interface {
 	AbortMultipartUpload(request *UploadRequest) error
 }
 
-func NewUpload(keyID, key, region string, svc int) (UploadClient, error) {
+func NewAws(keyID, key, region string, svc int) (UploadClient, error) {
 	return newAWSClient(keyID, key, region)
 }
+*/
 
-type awsClient struct {
+type AWSClient struct {
 	region string
 	svc    *s3.S3
 }
 
-func newAWSClient(keyID, key, region string) (*awsClient, error) {
+func NewAWSClient(keyID, key, region string) (*AWSClient, error) {
 	creds := credentials.NewStaticCredentials(keyID, key, "")
 	_, err := creds.Get()
 	if err != nil {
@@ -67,10 +70,10 @@ func newAWSClient(keyID, key, region string) (*awsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &awsClient{region: region, svc: s3.New(sess, cfg)}, nil
+	return &AWSClient{region: region, svc: s3.New(sess, cfg)}, nil
 }
 
-func (ac *awsClient) ListMultipartUploads(bucket string) ([]*UploadRequest, error) {
+func (ac *AWSClient) ListMultipartUploads(bucket string) ([]*UploadRequest, error) {
 	output, err := ac.svc.ListMultipartUploads(&s3.ListMultipartUploadsInput{
 		Bucket: &bucket,
 	})
@@ -89,7 +92,7 @@ func (ac *awsClient) ListMultipartUploads(bucket string) ([]*UploadRequest, erro
 	return requests, nil
 }
 
-func (ac *awsClient) GetObject(bucket, remotePath string) (*types.ISOInfo, error) {
+func (ac *AWSClient) HeadObject(bucket, remotePath string) (*types.ISOInfo, error) {
 	object, err := ac.svc.HeadObject(&s3.HeadObjectInput{
 		Bucket:       &bucket,
 		Key:          &remotePath,
@@ -112,7 +115,7 @@ func (ac *awsClient) GetObject(bucket, remotePath string) (*types.ISOInfo, error
 	}
 }
 
-func (ac *awsClient) createBucketIfNotExist(bucket string) error {
+func (ac *AWSClient) createBucketIfNotExist(bucket string) error {
 	// create bucket if not exist
 	_, err := ac.svc.HeadBucket(&s3.HeadBucketInput{Bucket: &bucket})
 	if err == nil {
@@ -132,7 +135,7 @@ func (ac *awsClient) createBucketIfNotExist(bucket string) error {
 	return nil
 }
 
-func (ac *awsClient) PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error {
+func (ac *AWSClient) PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error {
 	err := ac.createBucketIfNotExist(bucket)
 	if err != nil {
 		return err
@@ -149,7 +152,7 @@ func (ac *awsClient) PutObject(bucket, remotePath, checksum, fileType string, re
 	return err
 }
 
-func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
+func (ac *AWSClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
 	err := ac.createBucketIfNotExist(bucket)
 	if err != nil {
 		return nil, err
@@ -184,7 +187,7 @@ func (ac *awsClient) CreateMultipartUpload(bucket, remotePath, fileType string) 
 	}, nil
 }
 
-func (ac *awsClient) Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
+func (ac *AWSClient) Upload(partNo, length int64, request *UploadRequest, reader io.ReadSeeker,
 	checksum string) (string, error) {
 	partInput := &s3.UploadPartInput{
 		Body:              reader,
@@ -221,7 +224,7 @@ func (ac *awsClient) Upload(partNo, length int64, request *UploadRequest, reader
 	return "", retErr
 }
 
-func (ac *awsClient) CompleteMultipartUpload(request *UploadRequest, parts []*types.PartInfo, checksum string) error {
+func (ac *AWSClient) CompleteMultipartUpload(request *UploadRequest, parts []*types.PartInfo, checksum string) error {
 	completedParts := make([]*s3.CompletedPart, len(parts))
 	for i, p := range parts {
 		completedParts[i] = &s3.CompletedPart{
@@ -250,7 +253,7 @@ func (ac *awsClient) CompleteMultipartUpload(request *UploadRequest, parts []*ty
 	return err
 }
 
-func (ac *awsClient) AbortMultipartUpload(request *UploadRequest) error {
+func (ac *AWSClient) AbortMultipartUpload(request *UploadRequest) error {
 	abortInput := &s3.AbortMultipartUploadInput{
 		Bucket:   &request.Bucket,
 		Key:      &request.Key,
@@ -260,4 +263,22 @@ func (ac *awsClient) AbortMultipartUpload(request *UploadRequest) error {
 	common.LogDebugObject("AbortMultipartUpload", abortInput)
 	_, err := ac.svc.AbortMultipartUpload(abortInput)
 	return err
+}
+
+func (ac *AWSClient) GetObject(ctx context.Context, bucket, remotePath string, writer io.Writer) (int64, error) {
+	err := ac.createBucketIfNotExist(bucket)
+	if err != nil {
+		return 0, err
+	}
+
+	result, err := ac.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(remotePath),
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer result.Body.Close()
+
+	return io.Copy(writer, result.Body)
 }

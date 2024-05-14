@@ -147,7 +147,7 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		return nil
 	}
 
-	hash, err := lomohash.CalculateHash(path)
+	hash, err := lomohash.CalculateHashFile(path)
 	if err != nil {
 		return err
 	}

@@ -11,15 +11,7 @@ import (
 
 	"github.com/lomorage/lomo-backup/common/crypto"
 	"github.com/urfave/cli"
-	"golang.org/x/crypto/argon2"
 	"golang.org/x/term"
-)
-
-const (
-	argon2Time      = 1
-	argon2Memory    = 64 * 1024
-	argon2Thread    = 4
-	argon2KeyLength = 32 // 32 bytes key for AES-256
 )
 
 func getMasterKey() (string, error) {
@@ -41,12 +33,6 @@ func getMasterKey() (string, error) {
 	return string(bytePassword1), nil
 }
 
-// DeriveKeyFromPassphrase derives a cryptographic key from the provided passphrase using Argon2.
-func deriveKeyFromMasterKey(masterKey, salt []byte) []byte {
-	// Use Argon2id for key derivation
-	return argon2.IDKey(masterKey, salt, argon2Time, argon2Memory, argon2Thread, argon2KeyLength)
-}
-
 func genEncryptKeyAndSalt(masterKey []byte) (key []byte, salt []byte, err error) {
 	salt = make([]byte, aes.BlockSize)
 	_, err = io.ReadFull(rand.Reader, salt)
@@ -56,7 +42,7 @@ func genEncryptKeyAndSalt(masterKey []byte) (key []byte, salt []byte, err error)
 
 	// Derive key from passphrase using Argon2
 	// TODO: Using IV as salt for simplicity, change to different salt?
-	key = deriveKeyFromMasterKey(masterKey, salt)
+	key = crypto.DeriveKeyFromMasterKey(masterKey, salt)
 
 	return
 }
@@ -151,7 +137,7 @@ func decryptLocalFile(ctx *cli.Context) error {
 		dst = f
 	}
 
-	encryptKey := deriveKeyFromMasterKey([]byte(masterKey), iv)
+	encryptKey := crypto.DeriveKeyFromMasterKey([]byte(masterKey), iv)
 
 	decryptor, err := crypto.NewDecryptor(dst, encryptKey, iv)
 	if err != nil {
