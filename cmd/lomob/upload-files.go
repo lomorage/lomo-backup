@@ -201,6 +201,11 @@ func uploadFileToS3(ctx *cli.Context) error {
 	region := ctx.String("awsBucketRegion")
 	bucket := ctx.String("awsBucketName")
 
+	storageClass, err := getAWSStorageClass(ctx)
+	if err != nil {
+		return err
+	}
+
 	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
 	if err != nil {
 		return err
@@ -265,7 +270,7 @@ func uploadFileToS3(ctx *cli.Context) error {
 	}
 
 	fmt.Printf("Uploading file %s\n", remoteFilename)
-	err = cli.PutObject(bucket, remoteFilename, lomohash.CalculateHashBase64(hash), metaContentType, tmpFile)
+	err = cli.PutObject(bucket, remoteFilename, lomohash.CalculateHashBase64(hash), metaContentType, storageClass, tmpFile)
 	if err != nil {
 		fmt.Printf("Uploading file %s fail: %s\n", remoteFilename, err)
 	} else {

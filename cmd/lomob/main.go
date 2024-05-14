@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 
@@ -179,9 +180,14 @@ func main() {
 							Usage: "Save multiparts locally for debug",
 						},
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
+						},
+						cli.StringFlag{
+							Name:  "storage-class",
+							Usage: "The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA.",
+							Value: "GLACIER_IR",
 						},
 					},
 				},
@@ -206,7 +212,7 @@ func main() {
 							Value: defaultBucket,
 						},
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
@@ -245,7 +251,7 @@ func main() {
 							Value: defaultBucket,
 						},
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
@@ -268,7 +274,7 @@ func main() {
 							Value: "gdrive-token.json",
 						},
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
@@ -354,7 +360,7 @@ func main() {
 					ArgsUsage: "Usage: [input filename] [[output filename]]. If output filename is not given, it will be <intput filename>.enc",
 					Flags: []cli.Flag{
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
@@ -367,7 +373,7 @@ func main() {
 					ArgsUsage: "[filename]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
@@ -480,9 +486,14 @@ func main() {
 							Value: defaultBucket,
 						},
 						cli.StringFlag{
-							Name:   "encryt-key, k",
+							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
+						},
+						cli.StringFlag{
+							Name:  "storage-class",
+							Usage: "The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA.",
+							Value: "GLACIER_IR",
 						},
 					},
 				},
@@ -550,4 +561,27 @@ func initLogLevel(level int) error {
 func initDB(dbname string) (err error) {
 	db, err = dbx.OpenDB(dbname)
 	return err
+}
+
+func getAWSStorageClass(ctx *cli.Context) (string, error) {
+	c := ctx.String("storage-class")
+	switch c {
+	case "DEEP_ARCHIVE":
+		fallthrough
+	case "GLACIER":
+		fallthrough
+	case "GLACIER_IR":
+		fallthrough
+	case "REDUCED_REDUNDANCY":
+		fallthrough
+	case "INTELLIGENT_TIERING":
+		fallthrough
+	case "ONEZONE_IA":
+		fallthrough
+	case "STANDARD":
+		fallthrough
+	case "STANDARD_IA":
+		return c, nil
+	}
+	return "", fmt.Errorf("Invalid storage class: %s", c)
 }

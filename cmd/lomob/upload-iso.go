@@ -111,7 +111,7 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	return isoFile, isoInfo, parts, db.UpdateIsoBase64Hash(isoInfo.ID, isoInfo.HashBase64)
 }
 
-func prepareUploadRequest(cli *clients.AWSClient, region, bucket string,
+func prepareUploadRequest(cli *clients.AWSClient, region, bucket, storageClass string,
 	isoInfo *types.ISOInfo) (*clients.UploadRequest, error) {
 	isoFilename := filepath.Base(isoInfo.Name)
 	remoteInfo, err := cli.HeadObject(bucket, isoFilename)
@@ -143,7 +143,7 @@ func prepareUploadRequest(cli *clients.AWSClient, region, bucket string,
 	}
 
 	// create new upload
-	request, err := cli.CreateMultipartUpload(bucket, isoFilename, isoContentType)
+	request, err := cli.CreateMultipartUpload(bucket, isoFilename, isoContentType, storageClass)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func validateISOMetafile(metaFilename string, tree []byte) error {
 	return os.WriteFile(metaFilename, tree, 0644)
 }
 
-func uploadISOMetafile(cli *clients.AWSClient, bucket, isoFilename string) error {
+func uploadISOMetafile(cli *clients.AWSClient, bucket, storageClass, isoFilename string) error {
 	// TODO: create meta file if it is zero or not exist
 	tree, err := genTreeInIso(isoFilename)
 	if err != nil {
@@ -233,7 +233,7 @@ func uploadISOMetafile(cli *clients.AWSClient, bucket, isoFilename string) error
 	}
 
 	fmt.Printf("Uploading metadata file %s\n", metaFilename)
-	err = cli.PutObject(bucket, filepath.Base(metaFilename), hashBase64, metaContentType,
+	err = cli.PutObject(bucket, filepath.Base(metaFilename), hashBase64, metaContentType, storageClass,
 		bytes.NewReader(treeBuf))
 	if err != nil {
 		fmt.Printf("Uploading metadata file %s fail: %s\n", metaFilename, err)
@@ -243,7 +243,7 @@ func uploadISOMetafile(cli *clients.AWSClient, bucket, isoFilename string) error
 	return err
 }
 
-func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
+func uploadISO(accessKeyID, accessKey, region, bucket, storageClass, isoFilename string,
 	partSize int, saveParts bool) error {
 	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
 	if err != nil {
@@ -251,7 +251,7 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	}
 
 	// check metadata file firstly
-	err = uploadISOMetafile(cli, bucket, isoFilename)
+	err = uploadISOMetafile(cli, bucket, storageClass, isoFilename)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	}
 	defer isoFile.Close()
 
-	request, err := prepareUploadRequest(cli, region, bucket, isoInfo)
+	request, err := prepareUploadRequest(cli, region, bucket, storageClass, isoInfo)
 	if err != nil {
 		return err
 	}
@@ -368,8 +368,13 @@ func uploadISOs(ctx *cli.Context) error {
 		return errors.New("Please supply one iso file name at least, or -a to upload all files not uploaded")
 	}
 
+	storageClass, err := getAWSStorageClass(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, isoFilename := range ctx.Args() {
-		err = uploadISO(accessKeyID, secretAccessKey, region, bucket,
+		err = uploadISO(accessKeyID, secretAccessKey, region, bucket, storageClass,
 			isoFilename, int(partSize), saveParts)
 		if err != nil {
 			return err
