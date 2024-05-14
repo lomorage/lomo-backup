@@ -135,7 +135,7 @@ func (ac *AWSClient) createBucketIfNotExist(bucket string) error {
 	return nil
 }
 
-func (ac *AWSClient) PutObject(bucket, remotePath, checksum, fileType string, reader io.ReadSeeker) error {
+func (ac *AWSClient) PutObject(bucket, remotePath, checksum, fileType, storageClass string, reader io.ReadSeeker) error {
 	err := ac.createBucketIfNotExist(bucket)
 	if err != nil {
 		return err
@@ -147,12 +147,13 @@ func (ac *AWSClient) PutObject(bucket, remotePath, checksum, fileType string, re
 		ContentType:       aws.String(fileType),
 		ChecksumAlgorithm: &checksumAlgorithm,
 		ChecksumSHA256:    aws.String(checksum),
+		StorageClass:      aws.String(storageClass),
 	}
 	_, err = ac.svc.PutObject(input)
 	return err
 }
 
-func (ac *AWSClient) CreateMultipartUpload(bucket, remotePath, fileType string) (*UploadRequest, error) {
+func (ac *AWSClient) CreateMultipartUpload(bucket, remotePath, fileType, storageClass string) (*UploadRequest, error) {
 	err := ac.createBucketIfNotExist(bucket)
 	if err != nil {
 		return nil, err
@@ -163,6 +164,7 @@ func (ac *AWSClient) CreateMultipartUpload(bucket, remotePath, fileType string) 
 		Key:               &remotePath,
 		ContentType:       &fileType,
 		ChecksumAlgorithm: &checksumAlgorithm,
+		StorageClass:      &storageClass,
 	}
 
 	resp, err := ac.svc.CreateMultipartUpload(input)

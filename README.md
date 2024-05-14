@@ -56,8 +56,8 @@ Features:
 - :heavy_check_mark: pack all photos/videos into multiple ISOs and upload to S3
 - :heavy_check_mark: metadata to track which file is in which iso
 - :heavy_check_mark: backup files not in ISO to staging station, Google drive
-- [ ] pack all photos/videos into multiple ISOs and upload to Glancier
-- [ ] encrypt iso files before upload to Glacier, Google drive
+- :heavy_check_mark: pack all photos/videos into multiple ISOs and upload to Glancier
+- :heavy_check_mark: encrypt iso files before upload to Glacier, Google drive
 - [ ] metadata to track which files are in staging station
 - [ ] daemon running mode to watch folder change only, avoid scanning all folder daily
 - [ ] daily consistency check on staging station
@@ -81,6 +81,7 @@ Also welcome to try our free Photo backup applications. https://lomorage.com.
 - Checksum validation during upload
 - Self define iso size
 - On the fly encryption all files as iso file size may be big, and we want to avoid intermittent file in order to save time and not require extra disks
+- Original file hash and encrypted file hash are kept in cloud for future consistency check
 
 # Security Model
 The security model is from repository [filecrypt](https://github.com/kisom/filecrypt). Refer book [Practical Cryptography With Go](https://leanpub.com/gocrypto/read) for more detail.
