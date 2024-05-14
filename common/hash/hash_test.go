@@ -46,7 +46,7 @@ var expectBase64HashMultiparts = []string{
 func TestCalculateHash(t *testing.T) {
 	assert := assert.New(t)
 
-	hash, err := CalculateHash(testFilename)
+	hash, err := CalculateHashFile(testFilename)
 
 	// assert for nil (good for errors)
 	assert.Nil(err)

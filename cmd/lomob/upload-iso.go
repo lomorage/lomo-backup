@@ -52,7 +52,7 @@ func validateISO(isoFilename string) (*os.File, *types.ISOInfo, error) {
 		return nil, nil, errors.Errorf("Size in DB is %d, but got %d", iso.Size, info.Size())
 	}
 
-	hash, err := lomohash.CalculateHash(isoFilename)
+	hash, err := lomohash.CalculateHashFile(isoFilename)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -111,10 +111,10 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	return isoFile, isoInfo, parts, db.UpdateIsoBase64Hash(isoInfo.ID, isoInfo.HashBase64)
 }
 
-func prepareUploadRequest(cli clients.UploadClient, region, bucket string,
+func prepareUploadRequest(cli *clients.AWSClient, region, bucket string,
 	isoInfo *types.ISOInfo) (*clients.UploadRequest, error) {
 	isoFilename := filepath.Base(isoInfo.Name)
-	remoteInfo, err := cli.GetObject(bucket, isoFilename)
+	remoteInfo, err := cli.HeadObject(bucket, isoFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func validateISOMetafile(metaFilename string, tree []byte) error {
 	return os.WriteFile(metaFilename, tree, 0644)
 }
 
-func uploadISOMetafile(cli clients.UploadClient, bucket, isoFilename string) error {
+func uploadISOMetafile(cli *clients.AWSClient, bucket, isoFilename string) error {
 	// TODO: create meta file if it is zero or not exist
 	tree, err := genTreeInIso(isoFilename)
 	if err != nil {
@@ -208,7 +208,7 @@ func uploadISOMetafile(cli clients.UploadClient, bucket, isoFilename string) err
 
 	hashBase64 := lomohash.CalculateHashBase64(lomohash.CalculateHashBytes(treeBuf))
 
-	remoteInfo, err := cli.GetObject(bucket, metaFilename)
+	remoteInfo, err := cli.HeadObject(bucket, metaFilename)
 	if err != nil {
 		return err
 	}
@@ -245,7 +245,7 @@ func uploadISOMetafile(cli clients.UploadClient, bucket, isoFilename string) err
 
 func uploadISO(accessKeyID, accessKey, region, bucket, isoFilename string,
 	partSize int, saveParts bool) error {
-	cli, err := clients.NewUpload(accessKeyID, accessKey, region, clients.S3)
+	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
 	if err != nil {
 		return err
 	}
@@ -384,7 +384,7 @@ func listUploadingItems(ctx *cli.Context) error {
 	region := ctx.String("awsBucketRegion")
 	bucket := ctx.String("awsBucketName")
 
-	cli, err := clients.NewUpload(accessKeyID, secretAccessKey, region, clients.S3)
+	cli, err := clients.NewAWSClient(accessKeyID, secretAccessKey, region)
 	if err != nil {
 		return err
 	}
@@ -411,7 +411,7 @@ func abortUpload(ctx *cli.Context) error {
 	region := ctx.String("awsBucketRegion")
 	bucket := ctx.String("awsBucketName")
 
-	cli, err := clients.NewUpload(accessKeyID, secretAccessKey, region, clients.S3)
+	cli, err := clients.NewAWSClient(accessKeyID, secretAccessKey, region)
 	if err != nil {
 		return err
 	}

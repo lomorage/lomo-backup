@@ -216,7 +216,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		}
 		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(fileInfo.Size())}
 
-		hash, err := lomohash.CalculateHash(isoFilename)
+		hash, err := lomohash.CalculateHashFile(isoFilename)
 		if err != nil {
 			return 0, "", nil, err
 		}

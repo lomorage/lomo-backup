@@ -2,14 +2,17 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lomorage/lomo-backup/clients"
 	"github.com/lomorage/lomo-backup/common/crypto"
 	"github.com/lomorage/lomo-backup/common/gcloud"
 	"github.com/lomorage/lomo-backup/common/hash"
+	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	"github.com/lomorage/lomo-backup/common/types"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -190,4 +193,84 @@ func uploadFiles(ctx *cli.Context) error {
 
 func flattenScanRootDir(dir string) string {
 	return strings.ReplaceAll(dir, string(os.PathSeparator), "_")
+}
+
+func uploadFileToS3(ctx *cli.Context) error {
+	accessKeyID := ctx.String("awsAccessKeyID")
+	accessKey := ctx.String("awsSecretAccessKey")
+	region := ctx.String("awsBucketRegion")
+	bucket := ctx.String("awsBucketName")
+
+	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
+	if err != nil {
+		return err
+	}
+
+	masterKey := ctx.String("encrypt-key")
+	if masterKey == "" {
+		masterKey, err = getMasterKey()
+		if err != nil {
+			return err
+		}
+	}
+
+	remoteFilename := filepath.Base(ctx.Args()[0])
+	remoteInfo, err := cli.HeadObject(bucket, remoteFilename)
+	if err != nil {
+		return err
+	}
+	if remoteInfo != nil {
+		fmt.Printf("%s is already in bucket %s, no need upload again !\n",
+			remoteFilename, bucket)
+		return nil
+	}
+
+	src, err := os.Open(ctx.Args()[0])
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
+	if err != nil {
+		return err
+	}
+
+	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv)
+	if err != nil {
+		return err
+	}
+
+	// as PutObject requires encryption before input, thus, it has to write into one temp file
+	tmpFile, err := os.CreateTemp("", "")
+	if err != nil {
+		return err
+	}
+	tmpFileName := tmpFile.Name()
+	defer os.Remove(tmpFileName)
+
+	_, err = io.Copy(tmpFile, encryptor)
+	if err != nil {
+		return err
+	}
+
+	hash, err := lomohash.CalculateHashFile(tmpFileName)
+	if err != nil {
+		return err
+	}
+
+	_, err = tmpFile.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Uploading file %s\n", remoteFilename)
+	err = cli.PutObject(bucket, remoteFilename, lomohash.CalculateHashBase64(hash), metaContentType, tmpFile)
+	if err != nil {
+		fmt.Printf("Uploading file %s fail: %s\n", remoteFilename, err)
+	} else {
+		fmt.Printf("Upload file %s success!\n", remoteFilename)
+	}
+
+	return err
 }

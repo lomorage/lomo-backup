@@ -219,13 +219,35 @@ func main() {
 			Usage: "Restore encrypted files cloud",
 			Subcommands: cli.Commands{
 				{
-					Name:   "aws",
-					Action: listScanedDirs,
-					Usage:  "List all scanned directories",
+					Name:      "aws",
+					Action:    restoreAwsFile,
+					Usage:     "Restore ISO files in AWS drive",
+					ArgsUsage: "[iso file name] [output file name]",
 					Flags: []cli.Flag{
-						cli.BoolFlag{
-							Name:  "table-view, t",
-							Usage: "List all directories in table",
+						cli.StringFlag{
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
+						},
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: defaultBucket,
+						},
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
 						},
 					},
 				},
@@ -233,7 +255,7 @@ func main() {
 					Name:      "gdrive",
 					Action:    restoreGdriveFile,
 					Usage:     "Restore files in google drive",
-					ArgsUsage: "[encrypted file name in fullpath]",
+					ArgsUsage: "[encrypted file name in fullpath] [output file name]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:  "cred",
@@ -249,10 +271,6 @@ func main() {
 							Name:   "encryt-key, k",
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
-						},
-						cli.StringFlag{
-							Name:  "output, o",
-							Usage: "Saved file name",
 						},
 					},
 				},
@@ -432,6 +450,39 @@ func main() {
 							Name:  "awsBucketName",
 							Usage: "awsBucketName",
 							Value: defaultBucket,
+						},
+					},
+				},
+				{
+					Name:      "upload-s3",
+					Action:    uploadFileToS3,
+					Usage:     "Upload individual file into S3 with on-the-fly encryption",
+					ArgsUsage: "[local file name]",
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "awsAccessKeyID",
+							Usage:  "aws Access Key ID",
+							EnvVar: "AWS_ACCESS_KEY_ID",
+						},
+						cli.StringFlag{
+							Name:   "awsSecretAccessKey",
+							Usage:  "aws Secret Access Key",
+							EnvVar: "AWS_SECRET_ACCESS_KEY",
+						},
+						cli.StringFlag{
+							Name:   "awsBucketRegion",
+							Usage:  "aws Bucket Region",
+							EnvVar: "AWS_DEFAULT_REGION",
+						},
+						cli.StringFlag{
+							Name:  "awsBucketName",
+							Usage: "awsBucketName",
+							Value: defaultBucket,
+						},
+						cli.StringFlag{
+							Name:   "encryt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
 						},
 					},
 				},
