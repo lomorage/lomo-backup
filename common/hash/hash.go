@@ -18,6 +18,10 @@ func CalculateHashBase64(hash []byte) string {
 	return base64.StdEncoding.EncodeToString(hash)
 }
 
+func DecpdeHashBase64(hash string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(hash)
+}
+
 func CalculateHashBytes(buffer []byte) []byte {
 	h := sha256.New()
 	h.Write(buffer)

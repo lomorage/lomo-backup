@@ -28,7 +28,10 @@ const (
 	listIsosStmt  = "select id, name, size, status, region, bucket, hash_hex, hash_base64, create_time from isos"
 	insertIsoStmt = "insert into isos (name, size, status, hash_hex, create_time) values (?, ?, ?, ?, ?)"
 
+	resetISOFileInfo = "update isos set status=?, region='', bucket='', hash_base64='' where name=?"
+
 	updateIsoStatusStmt       = "update isos set status=? where id=?"
+	updateIsoStatusHashStmt   = "update isos set status=?, hash_base64=? where id=?"
 	updateIsoRegionBucketStmt = "update isos set status=?, region=?, bucket=? where id=?"
 	updateIsoBase64HashStmt   = "update isos set hash_base64=? where id=?"
 	updateIsoUploadInfoStmt   = "update isos set region=?,bucket=?, upload_key=?,upload_id=? where id=?"
@@ -37,9 +40,11 @@ const (
 		" values (?, ?, ?, ?, ?, ?, ?)"
 	getPartsByIsoIDStmt = "select part_no, hash_hex, hash_base64, size, status, etag, create_time " +
 		"from parts where iso_id=?"
-	deletePartsByIsoIDStmt         = "delete from parts where iso_id=?"
-	updatePartUploadStatusStmt     = "update parts set status=? where iso_id=? and part_no=?"
-	updatePartUploadEtagStatusStmt = "update parts set etag=?, status=? where iso_id=? and part_no=?"
+	deletePartsByIsoIDStmt             = "delete from parts where iso_id=?"
+	deletePartsByIsoNameStmt           = "delete from parts where iso_id=(select id from isos where name=?)"
+	updatePartUploadStatusStmt         = "update parts set status=? where iso_id=? and part_no=?"
+	updatePartUploadEtagStatusStmt     = "update parts set etag=?, status=? where iso_id=? and part_no=?"
+	updatePartUploadEtagStatusHashStmt = "update parts set etag=?, status=?, hash_hex=?, hash_base64=? where iso_id=? and part_no=?"
 )
 
 func (db *DB) ListFilesNotInISOAndCloud() ([]*types.FileInfo, error) {
@@ -197,6 +202,19 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 	return int(isoID), int(updatedFiles), err
 }
 
+func (db *DB) ResetISOUploadInfo(isoFilename string) error {
+	return db.retryIfLocked(fmt.Sprintf("reset iso %s upload info", isoFilename),
+		func(tx *sql.Tx) error {
+			_, err := tx.Exec(resetISOFileInfo, types.IsoUploading, isoFilename)
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec(deletePartsByIsoNameStmt, isoFilename)
+			return err
+		},
+	)
+}
+
 func (db *DB) UpdateFileIsoIDAndEncHash(isoID, fileID int, encryptedHash string) error {
 	return db.retryIfLocked(fmt.Sprintf("file %d's iso ID %d", fileID, isoID),
 		func(tx *sql.Tx) error {
@@ -219,6 +237,15 @@ func (db *DB) UpdateIsoStatus(isoID int, status types.IsoStatus) error {
 	return db.retryIfLocked(fmt.Sprintf("update iso %d status %s", isoID, status),
 		func(tx *sql.Tx) error {
 			_, err := tx.Exec(updateIsoStatusStmt, status, isoID)
+			return err
+		},
+	)
+}
+
+func (db *DB) UpdateIsoStatusHash(isoID int, hashBase64 string, status types.IsoStatus) error {
+	return db.retryIfLocked(fmt.Sprintf("update iso %d status %s base64 %s", isoID, status, hashBase64),
+		func(tx *sql.Tx) error {
+			_, err := tx.Exec(updateIsoStatusHashStmt, status, hashBase64, isoID)
 			return err
 		},
 	)
@@ -295,6 +322,16 @@ func (db *DB) UpdatePartEtagAndStatus(isoID, partNo int, etag string, status typ
 		isoID, partNo, etag, status),
 		func(tx *sql.Tx) error {
 			_, err := tx.Exec(updatePartUploadEtagStatusStmt, etag, status, isoID, partNo)
+			return err
+		},
+	)
+}
+
+func (db *DB) UpdatePartEtagAndStatusHash(isoID, partNo int, etag, hashHex, hashBase64 string, status types.PartStatus) error {
+	return db.retryIfLocked(fmt.Sprintf("update ISO %d part %d etag %s status %s, hashHex %s, hashBase64 %s",
+		isoID, partNo, etag, status, hashHex, hashBase64),
+		func(tx *sql.Tx) error {
+			_, err := tx.Exec(updatePartUploadEtagStatusHashStmt, etag, status, hashHex, hashBase64, isoID, partNo)
 			return err
 		},
 	)

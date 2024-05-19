@@ -18,7 +18,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-func uploadFiles(ctx *cli.Context) error {
+func uploadFilesToGdrive(ctx *cli.Context) error {
 	err := initDB(ctx.GlobalString("db"))
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func uploadFiles(ctx *cli.Context) error {
 			return err
 		}
 
-		encryptor, err := crypto.NewEncryptor(file, encryptKey, iv)
+		encryptor, err := crypto.NewEncryptor(file, encryptKey, iv, true)
 		if err != nil {
 			return err
 		}
@@ -195,7 +195,7 @@ func flattenScanRootDir(dir string) string {
 	return strings.ReplaceAll(dir, string(os.PathSeparator), "_")
 }
 
-func uploadFileToS3(ctx *cli.Context) error {
+func uploadFilesToS3(ctx *cli.Context) error {
 	accessKeyID := ctx.String("awsAccessKeyID")
 	accessKey := ctx.String("awsSecretAccessKey")
 	region := ctx.String("awsBucketRegion")
@@ -206,20 +206,45 @@ func uploadFileToS3(ctx *cli.Context) error {
 		return err
 	}
 
-	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
-	if err != nil {
-		return err
-	}
-
 	masterKey := ctx.String("encrypt-key")
-	if masterKey == "" {
+	if ctx.Bool("no-encrypt") {
+		masterKey = ""
+	} else if masterKey == "" {
 		masterKey, err = getMasterKey()
 		if err != nil {
 			return err
 		}
 	}
 
-	remoteFilename := filepath.Base(ctx.Args()[0])
+	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
+	if err != nil {
+		return err
+	}
+
+	for _, name := range ctx.Args() {
+		fmt.Printf("Uploading file %s\n", name)
+
+		if masterKey == "" {
+			err = uploadRawFileToS3(cli, bucket, storageClass, name, binContentType)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		tmpFilename, err := uploadEncryptFileToS3(cli, bucket, storageClass, name, masterKey)
+		if err != nil {
+			return err
+		}
+		err = os.Remove(tmpFilename)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func uploadFileToS3(cli *clients.AWSClient, bucket, storageClass, remoteFilename, expectHash, contentType string, expectSize int,
+	reader io.ReadSeeker) error {
 	remoteInfo, err := cli.HeadObject(bucket, remoteFilename)
 	if err != nil {
 		return err
@@ -229,53 +254,88 @@ func uploadFileToS3(ctx *cli.Context) error {
 			remoteFilename, bucket)
 		return nil
 	}
+	if remoteInfo != nil {
+		recreate := false
+		if remoteInfo.Size != expectSize {
+			logrus.Warnf("%s exists in cloud and its size is %d, but provided file size is %d",
+				remoteFilename, remoteInfo.Size, expectSize)
+			recreate = true
+		}
+		if remoteInfo.HashBase64 != expectHash {
+			logrus.Warnf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
+				remoteFilename, remoteInfo.HashBase64, expectHash)
+			recreate = true
+		}
+		// no need upload, return nil upload request
+		if !recreate {
+			fmt.Printf("%s is already in bucket %s, no need upload again !\n",
+				remoteFilename, bucket)
+			return nil
+		}
+	}
 
-	src, err := os.Open(ctx.Args()[0])
+	err = cli.PutObject(bucket, remoteFilename, expectHash, contentType, storageClass, reader)
+	if err != nil {
+		fmt.Printf("Uploading metadata file %s fail: %s\n", remoteFilename, err)
+	} else {
+		fmt.Printf("Upload metadata file %s success!\n", remoteFilename)
+	}
+	return err
+}
+
+func uploadRawFileToS3(cli *clients.AWSClient, bucket, storageClass, filename, contentType string) error {
+	h, err := hash.CalculateHashFile(filename)
 	if err != nil {
 		return err
+	}
+
+	hashBase64 := hash.CalculateHashBase64(h)
+
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	return uploadFileToS3(cli, bucket, storageClass, filepath.Base(filename), hashBase64, contentType, int(stat.Size()), f)
+}
+
+// as PutObject requires encryption before input, thus, it has to write into one temp file or memory to get all data
+// return tmp filename, and let caller delete
+func uploadEncryptFileToS3(cli *clients.AWSClient, bucket, storageClass, filename, masterKey string) (string, error) {
+	src, err := os.Open(filename)
+	if err != nil {
+		return "", err
 	}
 	defer src.Close()
 
-	encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
-	if err != nil {
-		return err
-	}
-
-	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv)
-	if err != nil {
-		return err
-	}
-
-	// as PutObject requires encryption before input, thus, it has to write into one temp file
 	tmpFile, err := os.CreateTemp("", "")
 	if err != nil {
-		return err
+		return "", err
 	}
 	tmpFileName := tmpFile.Name()
-	defer os.Remove(tmpFileName)
+	defer tmpFile.Close()
 
-	_, err = io.Copy(tmpFile, encryptor)
+	hash, err := encryptLocalFile(src, tmpFile, masterKey, true)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	hash, err := lomohash.CalculateHashFile(tmpFileName)
+	size, err := tmpFile.Seek(0, io.SeekEnd)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, err = tmpFile.Seek(0, io.SeekStart)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	fmt.Printf("Uploading file %s\n", remoteFilename)
-	err = cli.PutObject(bucket, remoteFilename, lomohash.CalculateHashBase64(hash), metaContentType, storageClass, tmpFile)
-	if err != nil {
-		fmt.Printf("Uploading file %s fail: %s\n", remoteFilename, err)
-	} else {
-		fmt.Printf("Upload file %s success!\n", remoteFilename)
-	}
-
-	return err
+	return tmpFileName, uploadFileToS3(cli, bucket, storageClass, filepath.Base(filename), lomohash.CalculateHashBase64(hash),
+		binContentType, int(size), tmpFile)
 }
