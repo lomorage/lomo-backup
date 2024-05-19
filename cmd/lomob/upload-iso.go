@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"io"
@@ -331,6 +332,15 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 	}
 	defer isoFile.Close()
 
+	decoded, err := hex.DecodeString(isoInfo.HashHex)
+	if err != nil {
+		return err
+	}
+	if len(decoded) < crypto.SaltLen() {
+		return errors.Errorf("invalid hash length '%d', less than '%d'", len(decoded), crypto.SaltLen())
+	}
+
+	salt := decoded[:crypto.SaltLen()]
 	// iso size need add salt block size
 	isoInfo.Size += crypto.SaltLen()
 	isoInfo.HashBase64 = ""
@@ -383,7 +393,7 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 		defer tmpFile.Close()
 
 		prs := lomoio.NewFilePartReadSeeker(isoFile, start, end)
-		h, err := encryptLocalFile(prs, tmpFile, masterKey, i == 0)
+		h, err := encryptLocalFile(prs, tmpFile, []byte(masterKey), salt, i == 0)
 		if err != nil {
 			return err
 		}
