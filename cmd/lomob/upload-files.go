@@ -137,6 +137,11 @@ func uploadFilesToGdrive(ctx *cli.Context) error {
 
 		fullLocalPath := filepath.Join(scanRoot, f.Name)
 
+		salt, err := genSalt(fullLocalPath)
+		if err != nil {
+			return err
+		}
+
 		// reuse folder ID if it is in map already
 		file, err := os.Open(fullLocalPath)
 		if err != nil {
@@ -148,12 +153,9 @@ func uploadFilesToGdrive(ctx *cli.Context) error {
 			return err
 		}
 
-		encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
-		if err != nil {
-			return err
-		}
+		encryptKey := crypto.DeriveKeyFromMasterKey([]byte(masterKey), salt)
 
-		encryptor, err := crypto.NewEncryptor(file, encryptKey, iv, true)
+		encryptor, err := crypto.NewEncryptor(file, encryptKey, salt, true)
 		if err != nil {
 			return err
 		}
@@ -308,6 +310,10 @@ func uploadRawFileToS3(cli *clients.AWSClient, bucket, storageClass, filename, c
 // as PutObject requires encryption before input, thus, it has to write into one temp file or memory to get all data
 // return tmp filename, and let caller delete
 func uploadEncryptFileToS3(cli *clients.AWSClient, bucket, storageClass, filename, masterKey string) (string, error) {
+	salt, err := genSalt(filename)
+	if err != nil {
+		return "", err
+	}
 	src, err := os.Open(filename)
 	if err != nil {
 		return "", err
@@ -321,7 +327,7 @@ func uploadEncryptFileToS3(cli *clients.AWSClient, bucket, storageClass, filenam
 	tmpFileName := tmpFile.Name()
 	defer tmpFile.Close()
 
-	hash, err := encryptLocalFile(src, tmpFile, masterKey, true)
+	hash, err := encryptLocalFile(src, tmpFile, []byte(masterKey), salt, true)
 	if err != nil {
 		return "", err
 	}

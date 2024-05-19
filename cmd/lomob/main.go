@@ -569,6 +569,12 @@ func main() {
 						},
 					},
 				},
+				{
+					Name:      "check-header",
+					Action:    checkHeader,
+					Usage:     "Check if the header of encrypt file follows the convention",
+					ArgsUsage: "[original file name] [encrypt file name]",
+				},
 			},
 		},
 	}

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"syscall"
 
 	"github.com/lomorage/lomo-backup/common/crypto"
+	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	"github.com/urfave/cli"
 	"golang.org/x/term"
 )
@@ -33,18 +35,21 @@ func getMasterKey() (string, error) {
 	return string(bytePassword1), nil
 }
 
-func genEncryptKeyAndSalt(masterKey []byte) (key []byte, salt []byte, err error) {
-	salt = make([]byte, aes.BlockSize)
-	_, err = io.ReadFull(rand.Reader, salt)
-	if err != nil {
-		return nil, nil, err
+func genSalt(filename string) ([]byte, error) {
+	if filename == "" {
+		salt := make([]byte, crypto.SaltLen())
+		_, err := io.ReadFull(rand.Reader, salt)
+		return salt, err
 	}
 
-	// Derive key from passphrase using Argon2
-	// TODO: Using IV as salt for simplicity, change to different salt?
-	key = crypto.DeriveKeyFromMasterKey(masterKey, salt)
-
-	return
+	h, err := lomohash.CalculateHashFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	if len(h) < crypto.SaltLen() {
+		return nil, fmt.Errorf("invalid hash len '%d', less than '%d'", len(h), crypto.SaltLen())
+	}
+	return h[:crypto.SaltLen()], nil
 }
 
 func encryptCmd(ctx *cli.Context) error {
@@ -60,7 +65,11 @@ func encryptCmd(ctx *cli.Context) error {
 		return errors.New("usage: [input filename] [[output filename]]. If output filename is not given, it will be <intput filename>.enc")
 	}
 
-	var err error
+	salt, err := genSalt(ifilename)
+	if err != nil {
+		return err
+	}
+
 	masterKey := ctx.String("encrypt-key")
 	if masterKey == "" {
 		masterKey, err = getMasterKey()
@@ -82,7 +91,7 @@ func encryptCmd(ctx *cli.Context) error {
 	defer dst.Close()
 
 	fmt.Printf("Start encrypt '%s', and save output to '%s'\n", ifilename, ofilename)
-	_, err = encryptLocalFile(src, dst, masterKey, true)
+	_, err = encryptLocalFile(src, dst, []byte(masterKey), salt, true)
 	if err != nil {
 		return err
 	}
@@ -92,12 +101,10 @@ func encryptCmd(ctx *cli.Context) error {
 	return nil
 }
 
-func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey string, hasHeader bool) ([]byte, error) {
-	encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
-	if err != nil {
-		return nil, err
-	}
-
+func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey, iv []byte, hasHeader bool) ([]byte, error) {
+	// Derive key from passphrase using Argon2
+	// TODO: Using IV as salt for simplicity, change to different salt?
+	encryptKey := crypto.DeriveKeyFromMasterKey(masterKey, iv)
 	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv, hasHeader)
 	if err != nil {
 		return nil, err
@@ -159,5 +166,36 @@ func decryptLocalFile(ctx *cli.Context) error {
 	}
 
 	fmt.Println("Finish decryption!")
+	return nil
+}
+
+func checkHeader(ctx *cli.Context) error {
+	if len(ctx.Args()) != 2 {
+		return errors.New("usage: [original file name] [encrypted file name]")
+	}
+
+	h, err := genSalt(ctx.Args()[0])
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(ctx.Args()[1])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	salt := make([]byte, crypto.SaltLen())
+	s, err := f.Read(salt)
+	if err != nil {
+		return err
+	}
+	if s != len(salt) {
+		return fmt.Errorf("expect read %d, actual read %d", len(salt), s)
+	}
+	if !reflect.DeepEqual(salt, h[:crypto.SaltLen()]) {
+		return errors.New("different salt detected")
+	}
+	fmt.Println("Salt is same as expected!")
 	return nil
 }
