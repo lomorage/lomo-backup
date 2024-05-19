@@ -22,9 +22,9 @@ const (
 
 	listFilesBySizeStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.size >= ? order by f.size DESC"
-	insertFileStmt = "insert into files (dir_id, name, ext, size, hash, mod_time, create_time)" +
+	insertFileStmt = "insert into files (dir_id, name, ext, size, hash_local, mod_time, create_time)" +
 		" values (?, ?, ?, ?, ?, ?, ?)"
-	getFileByNameAndDirStmt = "select iso_id, size, hash, mod_time from files where name=? and dir_id=?"
+	getFileByNameAndDirStmt = "select iso_id, size, hash_local, mod_time from files where name=? and dir_id=?"
 )
 
 const (
@@ -167,9 +167,9 @@ func (db *DB) GetFileByNameAndDirID(name string, dirID int) (*types.FileInfo, er
 	err := db.retryIfLocked(fmt.Sprintf("get file id %d/%s", dirID, name),
 		func(tx *sql.Tx) error {
 			var isoID, size int
-			var hash string
+			var hashLocal string
 			var modTime time.Time
-			err := tx.QueryRow(getFileByNameAndDirStmt, name, dirID).Scan(&isoID, &size, &hash, &modTime)
+			err := tx.QueryRow(getFileByNameAndDirStmt, name, dirID).Scan(&isoID, &size, &hashLocal, &modTime)
 			if err != nil {
 				if IsErrNoRow(err) {
 					return nil
@@ -177,7 +177,7 @@ func (db *DB) GetFileByNameAndDirID(name string, dirID int) (*types.FileInfo, er
 				return err
 			}
 			f = &types.FileInfo{Name: name, DirID: dirID, IsoID: isoID, Size: size,
-				Hash: hash, ModTime: modTime}
+				HashLocal: hashLocal, ModTime: modTime}
 			return nil
 		},
 	)
@@ -190,7 +190,7 @@ func (db *DB) InsertFile(f *types.FileInfo) (int, error) {
 		func(tx *sql.Tx) error {
 			res, err := tx.Exec(insertFileStmt, f.DirID, f.Name,
 				strings.ToLower(strings.TrimPrefix(filepath.Ext(f.Name), ".")),
-				f.Size, f.Hash, f.ModTime, time.Now().UTC())
+				f.Size, f.HashLocal, f.ModTime, time.Now().UTC())
 			if err != nil {
 				return err
 			}

@@ -157,8 +157,8 @@ func selectOrInsertFile(dirID int, path string, info os.FileInfo) error {
 		Name:    info.Name(),
 		Size:    int(info.Size()),
 		ModTime: info.ModTime(),
-		Hash:    lomohash.CalculateHashHex(hash),
 	}
+	fi.SetHashLocal(hash)
 
 	_, err = db.InsertFile(fi)
 	return err

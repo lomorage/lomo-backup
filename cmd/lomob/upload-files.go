@@ -172,15 +172,15 @@ func uploadFilesToGdrive(ctx *cli.Context) error {
 			logrus.Warnf("Close %s: %s", fullLocalPath, err)
 		}
 
-		hashEnc := hash.CalculateHashHex(encryptor.GetHash())
-		err = db.UpdateFileIsoIDAndEncHash(types.IsoIDCloud, f.ID, hashEnc)
+		hashEnc := hash.CalculateHashHex(encryptor.GetHashEncrypt())
+		err = db.UpdateFileIsoIDAndRemoteHash(types.IsoIDCloud, f.ID, hashEnc)
 		if err != nil {
 			return err
 		}
 
 		// add encrypt hash as part of the file's metadata
 		err = client.UpdateFileMetadata(fileID, map[string]string{
-			types.MetadataKeyHashOrig:    f.Hash,
+			types.MetadataKeyHashOrig:    f.HashLocal,
 			types.MetadataKeyHashEncrypt: hashEnc,
 		})
 		if err != nil {
@@ -263,9 +263,9 @@ func uploadFileToS3(cli *clients.AWSClient, bucket, storageClass, remoteFilename
 				remoteFilename, remoteInfo.Size, expectSize)
 			recreate = true
 		}
-		if remoteInfo.HashBase64 != expectHash {
+		if remoteInfo.HashRemote != expectHash {
 			logrus.Warnf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
-				remoteFilename, remoteInfo.HashBase64, expectHash)
+				remoteFilename, remoteInfo.HashRemote, expectHash)
 			recreate = true
 		}
 		// no need upload, return nil upload request
@@ -327,7 +327,7 @@ func uploadEncryptFileToS3(cli *clients.AWSClient, bucket, storageClass, filenam
 	tmpFileName := tmpFile.Name()
 	defer tmpFile.Close()
 
-	hash, err := encryptLocalFile(src, tmpFile, []byte(masterKey), salt, true)
+	_, hash, err := encryptLocalFile(src, tmpFile, []byte(masterKey), salt, true)
 	if err != nil {
 		return "", err
 	}

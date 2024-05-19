@@ -220,7 +220,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		if err != nil {
 			return 0, "", nil, err
 		}
-		isoInfo.HashHex = lomohash.CalculateHashHex(hash)
+		isoInfo.SetHashLocal(hash)
 		// create db entry and update file info
 		start := time.Now()
 		_, count, err := db.CreateIsoWithFileIDs(isoInfo,
@@ -249,7 +249,7 @@ func listISO(ctx *cli.Context) error {
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', tabwriter.TabIndent)
 	defer writer.Flush()
 
-	fmt.Fprint(writer, "ID\tName\tSize\tStatus\tRegion\tBucket\tFiles Count\tCreate Time\tHash\n")
+	fmt.Fprint(writer, "ID\tName\tSize\tStatus\tRegion\tBucket\tFiles Count\tCreate Time\tLocal Hash\n")
 	for _, iso := range isos {
 		_, count, err := db.GetTotalFilesInIso(iso.ID)
 		if err != nil {
@@ -257,7 +257,7 @@ func listISO(ctx *cli.Context) error {
 		}
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", iso.ID, iso.Name,
 			datasize.ByteSize(iso.Size).HR(), iso.Status, iso.Region, iso.Bucket, count,
-			common.FormatTime(iso.CreateTime.Local()), iso.HashBase64)
+			common.FormatTime(iso.CreateTime.Local()), iso.HashLocal)
 	}
 	return nil
 }

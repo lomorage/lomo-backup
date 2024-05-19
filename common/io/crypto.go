@@ -11,13 +11,14 @@ import (
 // CryptoStreamReader implements io.Reader interface to act as proxy btw cloud API and local file
 // It will also encrypt file on the fly
 type CryptoStreamReader struct {
-	f        io.ReadSeeker
-	fileLen  int64
-	nonce    []byte
-	nonceLen int64
-	stream   cipher.Stream
-	offset   int
-	hash     hash.Hash
+	f           io.ReadSeeker
+	fileLen     int64
+	nonce       []byte
+	nonceLen    int64
+	stream      cipher.Stream
+	offset      int
+	hashOrig    hash.Hash
+	hashEncrypt hash.Hash
 }
 
 func NewCryptoStreamReader(f io.ReadSeeker, nonce []byte, stream cipher.Stream) (*CryptoStreamReader, error) {
@@ -33,7 +34,8 @@ func NewCryptoStreamReader(f io.ReadSeeker, nonce []byte, stream cipher.Stream) 
 	return &CryptoStreamReader{
 		f: f, fileLen: l,
 		nonce: nonce, nonceLen: int64(len(nonce)),
-		stream: stream, hash: sha256.New(),
+		stream:   stream,
+		hashOrig: sha256.New(), hashEncrypt: sha256.New(),
 	}, nil
 }
 
@@ -54,7 +56,7 @@ func (r *CryptoStreamReader) Read(p []byte) (n int, err error) {
 		}
 		copy(p, r.nonce[r.offset:r.offset+l])
 
-		_, err = r.hash.Write(p[:l])
+		_, err = r.hashEncrypt.Write(p[:l])
 
 		r.offset += l
 
@@ -66,7 +68,14 @@ func (r *CryptoStreamReader) Read(p []byte) (n int, err error) {
 			return
 		}
 		r.offset += n
-		_, err = r.hash.Write(p[:n])
+		_, err = r.hashOrig.Write(p[:n])
+		if err != nil {
+			return
+		}
+		if len(r.nonce) == 0 {
+			return
+		}
+		_, err = r.hashEncrypt.Write(p[:n])
 		return
 	}
 
@@ -80,11 +89,19 @@ func (r *CryptoStreamReader) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
+	_, err = r.hashOrig.Write(buf[:n])
+	if err != nil {
+		return 0, err
+	}
+
 	r.offset += n
 
 	r.stream.XORKeyStream(p, buf)
 
-	_, err = r.hash.Write(p[:n])
+	_, err = r.hashEncrypt.Write(p[:n])
+	if err != nil {
+		return 0, err
+	}
 	return
 }
 
@@ -170,8 +187,12 @@ func (r *CryptoStreamReader) Seek(offset int64, whence int) (n int64, err error)
 	return 0, errors.New("not implemented")
 }
 
-func (r *CryptoStreamReader) GetHash() []byte {
-	return r.hash.Sum(nil)
+func (r *CryptoStreamReader) GetHashOrig() []byte {
+	return r.hashOrig.Sum(nil)
+}
+
+func (r *CryptoStreamReader) GetHashEncrypt() []byte {
+	return r.hashEncrypt.Sum(nil)
 }
 
 type CryptoStreamWriter struct {

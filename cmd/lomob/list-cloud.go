@@ -55,17 +55,17 @@ func listFileTreeInGDrive(client *gcloud.DriveClient, currNode treeprint.Tree, f
 	}
 	for _, file := range files {
 		t := file.ModTime
-		hashOrigin := file.Hash
-		if len(hashOrigin) > 6 {
-			hashOrigin = hashOrigin[:6]
+		hashLocal := file.HashLocal
+		if len(hashLocal) > 6 {
+			hashLocal = hashLocal[:6]
 		}
 
-		hashEncrypt := file.HashEncrypt
-		if len(hashEncrypt) > 6 {
-			hashEncrypt = hashEncrypt[:6]
+		hashRemote := file.HashRemote
+		if len(hashRemote) > 6 {
+			hashRemote = hashRemote[:6]
 		}
 		currNode.AddMetaNode(fmt.Sprintf("\t%12s\t%02d/%02d/%d\t%s\t%s", strconv.Itoa(file.Size),
-			t.Month(), t.Day(), t.Year(), hashOrigin, hashEncrypt), file.Name)
+			t.Month(), t.Day(), t.Year(), hashLocal, hashRemote), file.Name)
 	}
 	return nil
 }

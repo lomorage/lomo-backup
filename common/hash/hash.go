@@ -18,7 +18,7 @@ func CalculateHashBase64(hash []byte) string {
 	return base64.StdEncoding.EncodeToString(hash)
 }
 
-func DecpdeHashBase64(hash string) ([]byte, error) {
+func DecodeHashBase64(hash string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(hash)
 }
 
