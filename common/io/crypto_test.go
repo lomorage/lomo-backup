@@ -52,12 +52,14 @@ func verifyCryptoReadOnce(t *testing.T, r *CryptoStreamReader, step, l int, expe
 }
 
 //nolint:unparam
-func verifyCryptoRead(t *testing.T, r *CryptoStreamReader, stepNonce, stepBuf, nl, l int, expectData, expectHash []byte) {
+func verifyCryptoRead(t *testing.T, r *CryptoStreamReader, stepNonce, stepBuf, nl, l int,
+	expectData, expectHashOrig, expectHashEncryt []byte) {
 	verifyCryptoReadOnce(t, r, stepNonce, nl, expectData)
 
 	verifyCryptoReadOnce(t, r, stepBuf, l, expectData[nl:])
 
-	require.EqualValues(t, r.GetHash(), expectHash)
+	require.EqualValues(t, r.GetHashOrig(), expectHashOrig)
+	require.EqualValues(t, r.GetHashEncrypt(), expectHashEncryt)
 }
 
 func TestCryptoStreamReaderBasic(t *testing.T) {
@@ -73,9 +75,13 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 	}
 
 	h := sha256.New()
+	h.Write(data)
+	expectHashOrig := h.Sum(nil)
+
+	h = sha256.New()
 	h.Write(nonce)
 	h.Write(data)
-	expectHash := h.Sum(nil)
+	expectHashEncrypt := h.Sum(nil)
 
 	buf := bytes.NewReader(data)
 	r, err := NewCryptoStreamReader(buf, nonce, nil)
@@ -93,7 +99,8 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 	require.EqualValues(t, n, l)
 	require.EqualValues(t, data, testBuffer[:n])
 
-	require.EqualValues(t, r.GetHash(), expectHash)
+	require.EqualValues(t, expectHashOrig, r.GetHashOrig())
+	require.EqualValues(t, expectHashEncrypt, r.GetHashEncrypt())
 
 	// even step read
 	// reset buffer
@@ -101,38 +108,38 @@ func TestCryptoStreamReaderBasic(t *testing.T) {
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
 	// try small buffer
-	verifyCryptoRead(t, r, 2, 2, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, 2, 2, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
 	// different buffer
-	verifyCryptoRead(t, r, nl/2, l/2, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, nl/2, l/2, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
 	// first read is small buffer, and big buffer at succeeding
-	verifyCryptoRead(t, r, nl/2, l, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, nl/2, l, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 
 	// more complex test. return buffer is different
 	// case 1: verify the length of read buffer > 1/2*l, but < l
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
-	verifyCryptoRead(t, r, nl/2+1, l, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, nl/2+1, l, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 
 	// case 2: verify the length of read buffer > 1/2*nl, but < nl
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
-	verifyCryptoRead(t, r, nl, l/2+1, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, nl, l/2+1, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 
 	// case 3: each step is half plus 1
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nonce, nil)
 	require.Nil(t, err)
-	verifyCryptoRead(t, r, nl/2+1, l/2+1, nl, l, append(nonce, data...), expectHash)
+	verifyCryptoRead(t, r, nl/2+1, l/2+1, nl, l, append(nonce, data...), expectHashOrig, expectHashEncrypt)
 }
 
 func TestCryptoStreamReaderBasicNoNonce(t *testing.T) {
@@ -158,7 +165,8 @@ func TestCryptoStreamReaderBasicNoNonce(t *testing.T) {
 	require.EqualValues(t, n, l)
 	require.EqualValues(t, data, testBuffer[:n])
 
-	require.EqualValues(t, r.GetHash(), expectHash)
+	require.EqualValues(t, expectHash, r.GetHashOrig())
+	require.EqualValues(t, sha256.New().Sum(nil), r.GetHashEncrypt())
 
 	// even step read
 	// reset buffer
@@ -166,19 +174,19 @@ func TestCryptoStreamReaderBasicNoNonce(t *testing.T) {
 	r, err = NewCryptoStreamReader(buf, nil, nil)
 	require.Nil(t, err)
 	// try small buffer
-	verifyCryptoRead(t, r, 0, 2, 0, l, data, expectHash)
+	verifyCryptoRead(t, r, 0, 2, 0, l, data, expectHash, sha256.New().Sum(nil))
 
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nil, nil)
 	require.Nil(t, err)
 	// different buffer
-	verifyCryptoRead(t, r, 0, l/2, 0, l, data, expectHash)
+	verifyCryptoRead(t, r, 0, l/2, 0, l, data, expectHash, sha256.New().Sum(nil))
 
 	// case 2: verify the length of read buffer > 1/2*nl, but < nl
 	buf = bytes.NewReader(data)
 	r, err = NewCryptoStreamReader(buf, nil, nil)
 	require.Nil(t, err)
-	verifyCryptoRead(t, r, 0, l/2+1, 0, l, data, expectHash)
+	verifyCryptoRead(t, r, 0, l/2+1, 0, l, data, expectHash, sha256.New().Sum(nil))
 }
 
 func TestCryptoStream(t *testing.T) {
@@ -217,6 +225,20 @@ func TestCryptoStream(t *testing.T) {
 	expectStream.XORKeyStream(expectData, data)
 
 	require.EqualValues(t, expectData, testBuffer[:n])
+
+	// test hash
+	h := sha256.New()
+	h.Write(data)
+	expectHashOrig := h.Sum(nil)
+
+	require.EqualValues(t, expectHashOrig, r.GetHashOrig())
+
+	h = sha256.New()
+	h.Write(nonce)
+	h.Write(expectData)
+	expectHashEncrypt := h.Sum(nil)
+
+	require.EqualValues(t, expectHashEncrypt, r.GetHashEncrypt())
 
 	// use this test Buffer as input to test writer
 	// recreate stream

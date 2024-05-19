@@ -51,8 +51,12 @@ func (e *Encryptor) Seek(offset int64, whence int) (int64, error) {
 	return e.sreader.Seek(offset, whence)
 }
 
-func (e *Encryptor) GetHash() []byte {
-	return e.sreader.GetHash()
+func (e *Encryptor) GetHashOrig() []byte {
+	return e.sreader.GetHashOrig()
+}
+
+func (e *Encryptor) GetHashEncrypt() []byte {
+	return e.sreader.GetHashEncrypt()
 }
 
 type Decryptor struct {

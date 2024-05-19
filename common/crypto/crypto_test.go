@@ -24,7 +24,7 @@ func TestEncryptDecrypt(t *testing.T) {
 	}
 }
 
-func genExpectHash(t *testing.T, plaintext, key, iv []byte, inclIv bool) []byte {
+func genExpectEncryptHash(t *testing.T, plaintext, key, iv []byte, inclIv bool) []byte {
 	stream, err := newCipherStream(key, iv)
 	require.Nil(t, err)
 
@@ -49,7 +49,7 @@ func testEncryptDecrypt(t *testing.T, plaintext []byte, hasHeader bool) {
 	_, err = io.ReadFull(rand.Reader, iv)
 	require.Nil(t, err)
 
-	expectHash := genExpectHash(t, plaintext, key, iv, hasHeader)
+	expectHashEncrypt := genExpectEncryptHash(t, plaintext, key, iv, hasHeader)
 
 	buf := bytes.NewReader(plaintext)
 	en, err := NewEncryptor(buf, key, iv, hasHeader)
@@ -68,7 +68,10 @@ func testEncryptDecrypt(t *testing.T, plaintext []byte, hasHeader bool) {
 	require.EqualValues(t, n, len(plaintext))
 
 	// verify hash
-	require.EqualValues(t, expectHash, en.GetHash())
+	h := sha256.New()
+	h.Write(plaintext)
+	require.EqualValues(t, h.Sum(nil), en.GetHashOrig(), string(plaintext))
+	require.EqualValues(t, expectHashEncrypt, en.GetHashEncrypt())
 
 	testBuffer = testBuffer[:n]
 

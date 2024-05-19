@@ -183,8 +183,8 @@ func (c *DriveClient) ListFiles(folderID string) ([]*types.DirInfo, []*types.Fil
 			ModTime: t,
 		}
 		if f.AppProperties != nil {
-			fi.Hash = f.AppProperties[types.MetadataKeyHashOrig]
-			fi.HashEncrypt = f.AppProperties[types.MetadataKeyHashEncrypt]
+			fi.HashLocal = f.AppProperties[types.MetadataKeyHashOrig]
+			fi.HashRemote = f.AppProperties[types.MetadataKeyHashEncrypt]
 		}
 		files = append(files, fi)
 	}

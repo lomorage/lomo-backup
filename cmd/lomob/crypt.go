@@ -91,7 +91,7 @@ func encryptCmd(ctx *cli.Context) error {
 	defer dst.Close()
 
 	fmt.Printf("Start encrypt '%s', and save output to '%s'\n", ifilename, ofilename)
-	_, err = encryptLocalFile(src, dst, []byte(masterKey), salt, true)
+	_, _, err = encryptLocalFile(src, dst, []byte(masterKey), salt, true)
 	if err != nil {
 		return err
 	}
@@ -101,20 +101,20 @@ func encryptCmd(ctx *cli.Context) error {
 	return nil
 }
 
-func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey, iv []byte, hasHeader bool) ([]byte, error) {
+func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey, iv []byte, hasHeader bool) ([]byte, []byte, error) {
 	// Derive key from passphrase using Argon2
 	// TODO: Using IV as salt for simplicity, change to different salt?
 	encryptKey := crypto.DeriveKeyFromMasterKey(masterKey, iv)
 	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv, hasHeader)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	_, err = io.Copy(dst, encryptor)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return encryptor.GetHash(), nil
+	return encryptor.GetHashOrig(), encryptor.GetHashEncrypt(), nil
 }
 
 func decryptLocalFile(ctx *cli.Context) error {

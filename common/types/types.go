@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/lomorage/lomo-backup/common/hash"
+)
 
 // IsoIDCloud is to flag the file is uploaded into cloud and not packed in ISO yet
 const IsoIDCloud = -1
@@ -66,15 +70,22 @@ type DirInfo struct {
 
 // FileInfo is structure for file
 type FileInfo struct {
-	ID          int
-	DirID       int
-	IsoID       int
-	RefID       string // ID in cloud
-	Name        string
-	Hash        string
-	HashEncrypt string
-	Size        int
-	ModTime     time.Time
+	ID    int
+	DirID int
+	IsoID int
+	RefID string // ID in cloud
+	Name  string
+	// HashLocal use hex encoding method as command line sha256sum output is hex, so as to easy compare
+	HashLocal string
+	// HashRemote uses base64 encoding as it is required by AWS
+	HashRemote string
+	Size       int
+	ModTime    time.Time
+}
+
+// SetHashLocal
+func (fi *FileInfo) SetHashLocal(data []byte) {
+	fi.HashLocal = hash.CalculateHashHex(data)
 }
 
 // ISOInfo is structure for one iso file
@@ -85,11 +96,19 @@ type ISOInfo struct {
 	Bucket     string
 	UploadKey  string
 	UploadID   string
-	HashHex    string
-	HashBase64 string
+	HashLocal  string
+	HashRemote string
 	Size       int
 	Status     IsoStatus
 	CreateTime time.Time
+}
+
+func (ii *ISOInfo) SetHashLocal(data []byte) {
+	ii.HashLocal = hash.CalculateHashHex(data)
+}
+
+func (ii *ISOInfo) SetHashRemote(data []byte) {
+	ii.HashRemote = hash.CalculateHashBase64(data)
 }
 
 // PartInfo is struct for one upload part of one iso file
@@ -99,7 +118,15 @@ type PartInfo struct {
 	Size       int
 	Status     PartStatus
 	Etag       string
-	HashHex    string
-	HashBase64 string
+	HashLocal  string
+	HashRemote string
 	CreateTime time.Time
+}
+
+func (pi *PartInfo) SetHashLocal(data []byte) {
+	pi.HashLocal = hash.CalculateHashHex(data)
+}
+
+func (pi *PartInfo) SetHashRemote(data []byte) {
+	pi.HashRemote = hash.CalculateHashBase64(data)
 }

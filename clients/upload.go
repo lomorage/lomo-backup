@@ -104,7 +104,7 @@ func (ac *AWSClient) HeadObject(bucket, remotePath string) (*types.ISOInfo, erro
 			info.Size = int(*object.ContentLength)
 		}
 		if object.ChecksumSHA256 != nil {
-			info.HashBase64 = *object.ChecksumSHA256
+			info.HashRemote = *object.ChecksumSHA256
 		}
 		common.LogDebugObject("HeadObjectReply", info)
 		return info, nil
@@ -232,7 +232,7 @@ func (ac *AWSClient) CompleteMultipartUpload(request *UploadRequest, parts []*ty
 		completedParts[i] = &s3.CompletedPart{
 			PartNumber:     aws.Int64(int64(p.PartNo)),
 			ETag:           aws.String(p.Etag),
-			ChecksumSHA256: aws.String(p.HashBase64),
+			ChecksumSHA256: aws.String(p.HashRemote),
 		}
 	}
 
