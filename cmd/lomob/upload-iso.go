@@ -561,6 +561,9 @@ func listUploadingItems(ctx *cli.Context) error {
 }
 
 func abortUpload(ctx *cli.Context) error {
+	if len(ctx.Args()) == 0 {
+		return errors.New("please provide upload key at least")
+	}
 	accessKeyID := ctx.String("awsAccessKeyID")
 	secretAccessKey := ctx.String("awsSecretAccessKey")
 	region := ctx.String("awsBucketRegion")
@@ -571,15 +574,43 @@ func abortUpload(ctx *cli.Context) error {
 		return err
 	}
 
-	err = cli.AbortMultipartUpload(&clients.UploadRequest{
-		Key:    ctx.Args()[0],
-		ID:     ctx.Args()[1],
-		Bucket: bucket,
-	})
-	if err != nil {
-		return err
+	uploadKey := ctx.Args()[0]
+	if len(ctx.Args()) > 1 {
+		err = cli.AbortMultipartUpload(&clients.UploadRequest{
+			Key:    uploadKey,
+			ID:     ctx.Args()[1],
+			Bucket: bucket,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println("abort upload success")
+		return nil
 	}
-	fmt.Println("abort upload success")
+
+	requests, err := cli.ListMultipartUploads(bucket)
+	if err != nil {
+		return errors.Wrap(err, "while listing all multi part uploads")
+	}
+	if len(requests) == 0 {
+		fmt.Println("no in progress multipart upload to abort")
+		return nil
+	}
+	for _, r := range requests {
+		if r.Key != uploadKey {
+			continue
+		}
+		err = cli.AbortMultipartUpload(&clients.UploadRequest{
+			Key:    uploadKey,
+			ID:     r.ID,
+			Bucket: bucket,
+		})
+		if err != nil {
+			fmt.Printf("abort upload ID %s: %s\n", r.ID, err)
+		} else {
+			fmt.Printf("abort upload ID %s success!\n", r.ID)
+		}
+	}
 	return nil
 }
 

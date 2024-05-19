@@ -460,8 +460,8 @@ func main() {
 				{
 					Name:      "abort-upload",
 					Action:    abortUpload,
-					Usage:     "Abort in progress upload",
-					ArgsUsage: "[upload key] [upload ID]",
+					Usage:     "Abort in progress upload. If upload ID is not provided, it will delete all upload for given key",
+					ArgsUsage: "[upload key] [[upload ID]]",
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:   "awsAccessKeyID",
