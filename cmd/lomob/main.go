@@ -132,6 +132,24 @@ func main() {
 							Name:  "save-parts,s",
 							Usage: "Save multiparts locally for debug",
 						},
+						cli.BoolFlag{
+							Name:  "no-encrypt",
+							Usage: "not do any encryption, and upload raw files",
+						},
+						cli.BoolFlag{
+							Name:  "force",
+							Usage: "force to upload from scratch and not reuse previous upload info",
+						},
+						cli.StringFlag{
+							Name:   "encrypt-key, k",
+							Usage:  "Master key to encrypt current upload file",
+							EnvVar: "LOMOB_MASTER_KEY",
+						},
+						cli.StringFlag{
+							Name:  "storage-class",
+							Usage: "The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA.",
+							Value: "STANDARD",
+						},
 					},
 				},
 			},
@@ -179,6 +197,14 @@ func main() {
 							Name:  "save-parts,s",
 							Usage: "Save multiparts locally for debug",
 						},
+						cli.BoolFlag{
+							Name:  "no-encrypt",
+							Usage: "not do any encryption, and upload raw files",
+						},
+						cli.BoolFlag{
+							Name:  "force",
+							Usage: "force to upload from scratch and not reuse previous upload info",
+						},
 						cli.StringFlag{
 							Name:   "encrypt-key, k",
 							Usage:  "Master key to encrypt current upload file",
@@ -187,13 +213,13 @@ func main() {
 						cli.StringFlag{
 							Name:  "storage-class",
 							Usage: "The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA.",
-							Value: "GLACIER_IR",
+							Value: "STANDARD",
 						},
 					},
 				},
 				{
 					Name:   "files",
-					Action: uploadFiles,
+					Action: uploadFilesToGdrive,
 					Usage:  "Upload individual files not in ISO to google drive",
 					Flags: []cli.Flag{
 						cli.StringFlag{
@@ -461,7 +487,7 @@ func main() {
 				},
 				{
 					Name:      "upload-s3",
-					Action:    uploadFileToS3,
+					Action:    uploadFilesToS3,
 					Usage:     "Upload individual file into S3 with on-the-fly encryption",
 					ArgsUsage: "[local file name]",
 					Flags: []cli.Flag{
@@ -485,15 +511,19 @@ func main() {
 							Usage: "awsBucketName",
 							Value: defaultBucket,
 						},
+						cli.BoolFlag{
+							Name:  "no-encrypt",
+							Usage: "not do any encryption, and upload raw files",
+						},
 						cli.StringFlag{
 							Name:   "encrypt-key, k",
-							Usage:  "Master key to encrypt current upload file",
+							Usage:  "Master key to encrypt current upload file. If it is empty, means no encryption is needed",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
 						cli.StringFlag{
 							Name:  "storage-class",
 							Usage: "The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA.",
-							Value: "GLACIER_IR",
+							Value: "STANDARD",
 						},
 					},
 				},

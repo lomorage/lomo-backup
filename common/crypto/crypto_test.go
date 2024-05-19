@@ -18,11 +18,13 @@ func TestEncryptDecrypt(t *testing.T) {
 		"small one",
 		"some plaintext longer than length of block size -----",
 	} {
-		testEncryptDecrypt(t, []byte(text))
+		for _, hasHeader := range []bool{true, false} {
+			testEncryptDecrypt(t, []byte(text), hasHeader)
+		}
 	}
 }
 
-func genExpectHash(t *testing.T, plaintext, key, iv []byte) []byte {
+func genExpectHash(t *testing.T, plaintext, key, iv []byte, inclIv bool) []byte {
 	stream, err := newCipherStream(key, iv)
 	require.Nil(t, err)
 
@@ -30,12 +32,16 @@ func genExpectHash(t *testing.T, plaintext, key, iv []byte) []byte {
 	stream.XORKeyStream(buf, plaintext)
 
 	h := sha256.New()
-	_, err = h.Write(append(iv, buf...))
+	if inclIv {
+		_, err = h.Write(append(iv, buf...))
+	} else {
+		_, err = h.Write(buf)
+	}
 	require.Nil(t, err)
 	return h.Sum(nil)
 }
 
-func testEncryptDecrypt(t *testing.T, plaintext []byte) {
+func testEncryptDecrypt(t *testing.T, plaintext []byte, hasHeader bool) {
 	key, err := hex.DecodeString("6368616e676520746869732070617373")
 	require.Nil(t, err)
 
@@ -43,21 +49,21 @@ func testEncryptDecrypt(t *testing.T, plaintext []byte) {
 	_, err = io.ReadFull(rand.Reader, iv)
 	require.Nil(t, err)
 
-	expectHash := genExpectHash(t, plaintext, key, iv)
+	expectHash := genExpectHash(t, plaintext, key, iv, hasHeader)
 
 	buf := bytes.NewReader(plaintext)
-	en, err := NewEncryptor(buf, key, iv)
+	en, err := NewEncryptor(buf, key, iv, hasHeader)
 	require.Nil(t, err)
 
 	// make buffer larger
 	testBuffer := make([]byte, 100)
-
+	if hasHeader {
+		n, err := en.Read(testBuffer)
+		require.Nil(t, err)
+		require.EqualValues(t, n, len(iv), plaintext)
+		require.EqualValues(t, iv, testBuffer[:len(iv)])
+	}
 	n, err := en.Read(testBuffer)
-	require.Nil(t, err)
-	require.EqualValues(t, n, len(iv), plaintext)
-	require.EqualValues(t, iv, testBuffer[:len(iv)])
-
-	n, err = en.Read(testBuffer)
 	require.Nil(t, err)
 	require.EqualValues(t, n, len(plaintext))
 

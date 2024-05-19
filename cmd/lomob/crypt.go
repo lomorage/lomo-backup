@@ -68,10 +68,6 @@ func encryptCmd(ctx *cli.Context) error {
 			return err
 		}
 	}
-	encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
-	if err != nil {
-		return err
-	}
 
 	src, err := os.Open(ifilename)
 	if err != nil {
@@ -85,13 +81,8 @@ func encryptCmd(ctx *cli.Context) error {
 	}
 	defer dst.Close()
 
-	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv)
-	if err != nil {
-		return err
-	}
-
 	fmt.Printf("Start encrypt '%s', and save output to '%s'\n", ifilename, ofilename)
-	_, err = io.Copy(dst, encryptor)
+	_, err = encryptLocalFile(src, dst, masterKey, true)
 	if err != nil {
 		return err
 	}
@@ -99,6 +90,24 @@ func encryptCmd(ctx *cli.Context) error {
 	fmt.Println("Finish encryption!")
 
 	return nil
+}
+
+func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey string, hasHeader bool) ([]byte, error) {
+	encryptKey, iv, err := genEncryptKeyAndSalt([]byte(masterKey))
+	if err != nil {
+		return nil, err
+	}
+
+	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv, hasHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = io.Copy(dst, encryptor)
+	if err != nil {
+		return nil, err
+	}
+	return encryptor.GetHash(), nil
 }
 
 func decryptLocalFile(ctx *cli.Context) error {

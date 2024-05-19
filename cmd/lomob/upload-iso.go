@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"hash"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/lomorage/lomo-backup/clients"
 	"github.com/lomorage/lomo-backup/common"
+	"github.com/lomorage/lomo-backup/common/crypto"
 	"github.com/lomorage/lomo-backup/common/datasize"
 	lomohash "github.com/lomorage/lomo-backup/common/hash"
 	lomoio "github.com/lomorage/lomo-backup/common/io"
@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	isoContentType  = "application/octet-stream"
-	metaContentType = "text/plain"
+	binContentType  = "application/octet-stream"
+	textContentType = "text/plain"
 )
 
 func mkIsoMetadataFilename(isoFilename string) string {
@@ -58,12 +58,12 @@ func validateISO(isoFilename string) (*os.File, *types.ISOInfo, error) {
 	}
 	hashHex := lomohash.CalculateHashHex(hash)
 	if hashHex != iso.HashHex {
-		return nil, nil, errors.Errorf("Hash in DB is %s, but got %s", iso.HashHex, hash)
+		return nil, nil, errors.Errorf("Hash in DB is %s, but got %s", iso.HashHex, hashHex)
 	}
 	return f, iso, nil
 }
 
-func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOInfo, []*types.PartInfo, error) {
+func prepareUploadParts(isoFilename string, partSize int, calHash bool) (*os.File, *types.ISOInfo, []*types.PartInfo, error) {
 	isoFile, isoInfo, err := validateISO(isoFilename)
 	if err != nil {
 		return nil, nil, nil, err
@@ -77,25 +77,36 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	if len(parts) != 0 {
 		return isoFile, isoInfo, parts, nil
 	}
-	partsChecksum, err := lomohash.CalculateMultiPartsHash(isoFilename, partSize)
-	if err != nil {
-		return nil, nil, nil, err
+	var (
+		numParts      int
+		partsChecksum [][]byte
+	)
+	if calHash {
+		partsChecksum, err = lomohash.CalculateMultiPartsHash(isoFilename, partSize)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		numParts = len(partsChecksum)
+	} else {
+		numParts = isoInfo.Size/partSize + 1
 	}
 
 	partLength := 0
 	remaining := isoInfo.Size
-	parts = make([]*types.PartInfo, len(partsChecksum))
-	for i, p := range partsChecksum {
+	parts = make([]*types.PartInfo, numParts)
+	for i := 0; i < numParts; i++ {
 		if remaining < partSize {
 			partLength = remaining
 		} else {
 			partLength = partSize
 		}
 		parts[i] = &types.PartInfo{
-			PartNo:     i + 1,
-			Size:       partLength,
-			HashHex:    lomohash.CalculateHashHex(p),
-			HashBase64: lomohash.CalculateHashBase64(p),
+			PartNo: i + 1,
+			Size:   partLength,
+		}
+		if partsChecksum != nil {
+			parts[i].HashHex = lomohash.CalculateHashHex(partsChecksum[i])
+			parts[i].HashBase64 = lomohash.CalculateHashBase64(partsChecksum[i])
 		}
 		remaining -= partLength
 	}
@@ -104,6 +115,10 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if !calHash {
+		return isoFile, isoInfo, parts, nil
+	}
+
 	isoInfo.HashBase64, err = lomohash.ConcatAndCalculateBase64Hash(partsChecksum)
 	if err != nil {
 		return nil, nil, nil, err
@@ -112,21 +127,23 @@ func prepareUploadParts(isoFilename string, partSize int) (*os.File, *types.ISOI
 }
 
 func prepareUploadRequest(cli *clients.AWSClient, region, bucket, storageClass string,
-	isoInfo *types.ISOInfo) (*clients.UploadRequest, error) {
+	isoInfo *types.ISOInfo, force bool) (*clients.UploadRequest, error) {
 	isoFilename := filepath.Base(isoInfo.Name)
 	remoteInfo, err := cli.HeadObject(bucket, isoFilename)
 	if err != nil {
 		return nil, err
 	}
-	if remoteInfo != nil {
+	if !force && remoteInfo != nil {
 		if remoteInfo.Size != isoInfo.Size {
 			return nil, errors.Errorf("%s exists in cloud and its size is %d, but provided file size is %d",
 				isoFilename, remoteInfo.Size, isoInfo.Size)
 		}
-		remoteHash := strings.Split(remoteInfo.HashBase64, "-")[0]
-		if remoteHash != isoInfo.HashBase64 {
-			return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided ccommonhecksum is %s",
-				isoFilename, remoteHash, isoInfo.HashBase64)
+		if isoInfo.HashBase64 != "" {
+			remoteHash := strings.Split(remoteInfo.HashBase64, "-")[0]
+			if remoteHash != isoInfo.HashBase64 {
+				return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided ccommonhecksum is %s",
+					isoFilename, remoteHash, isoInfo.HashBase64)
+			}
 		}
 		// no need upload, return nil upload request
 		return nil, nil
@@ -143,7 +160,7 @@ func prepareUploadRequest(cli *clients.AWSClient, region, bucket, storageClass s
 	}
 
 	// create new upload
-	request, err := cli.CreateMultipartUpload(bucket, isoFilename, isoContentType, storageClass)
+	request, err := cli.CreateMultipartUpload(bucket, isoFilename, binContentType, storageClass)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +208,7 @@ func validateISOMetafile(metaFilename string, tree []byte) error {
 	return os.WriteFile(metaFilename, tree, 0644)
 }
 
-func uploadISOMetafile(cli *clients.AWSClient, bucket, storageClass, isoFilename string) error {
+func uploadISOMetafile(cli *clients.AWSClient, bucket, storageClass, isoFilename, masterKey string) error {
 	// TODO: create meta file if it is zero or not exist
 	tree, err := genTreeInIso(isoFilename)
 	if err != nil {
@@ -206,63 +223,30 @@ func uploadISOMetafile(cli *clients.AWSClient, bucket, storageClass, isoFilename
 		return nil
 	}
 
-	hashBase64 := lomohash.CalculateHashBase64(lomohash.CalculateHashBytes(treeBuf))
+	if masterKey == "" {
+		fmt.Printf("Uploading un-encrypted metadata file %s\n", metaFilename)
 
-	remoteInfo, err := cli.HeadObject(bucket, metaFilename)
+		return uploadRawFileToS3(cli, bucket, storageClass, metaFilename, textContentType)
+	}
+
+	fmt.Printf("Uploading encrypted metadata file %s\n", metaFilename)
+
+	tmpFileName, err := uploadEncryptFileToS3(cli, bucket, storageClass, metaFilename, masterKey)
 	if err != nil {
 		return err
 	}
-	if remoteInfo != nil {
-		recreate := false
-		if remoteInfo.Size != len(treeBuf) {
-			logrus.Warnf("%s exists in cloud and its size is %d, but provided file size is %d",
-				metaFilename, remoteInfo.Size, len(treeBuf))
-			recreate = true
-		}
-		if remoteInfo.HashBase64 != hashBase64 {
-			logrus.Warnf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
-				metaFilename, remoteInfo.HashBase64, hashBase64)
-			recreate = true
-		}
-		// no need upload, return nil upload request
-		if !recreate {
-			fmt.Printf("%s is already in bucket %s, no need upload again !\n",
-				metaFilename, bucket)
-			return nil
-		}
-	}
-
-	fmt.Printf("Uploading metadata file %s\n", metaFilename)
-	err = cli.PutObject(bucket, filepath.Base(metaFilename), hashBase64, metaContentType, storageClass,
-		bytes.NewReader(treeBuf))
-	if err != nil {
-		fmt.Printf("Uploading metadata file %s fail: %s\n", metaFilename, err)
-	} else {
-		fmt.Printf("Upload metadata file %s success!\n", metaFilename)
-	}
-	return err
+	return os.Remove(tmpFileName)
 }
 
-func uploadISO(accessKeyID, accessKey, region, bucket, storageClass, isoFilename string,
-	partSize int, saveParts bool) error {
-	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
-	if err != nil {
-		return err
-	}
-
-	// check metadata file firstly
-	err = uploadISOMetafile(cli, bucket, storageClass, isoFilename)
-	if err != nil {
-		return err
-	}
-
-	isoFile, isoInfo, parts, err := prepareUploadParts(isoFilename, partSize)
+func uploadRawParts(cli *clients.AWSClient, region, bucket, storageClass, isoFilename string,
+	partSize int, saveParts, force bool) error {
+	isoFile, isoInfo, parts, err := prepareUploadParts(isoFilename, partSize, true)
 	if err != nil {
 		return err
 	}
 	defer isoFile.Close()
 
-	request, err := prepareUploadRequest(cli, region, bucket, storageClass, isoInfo)
+	request, err := prepareUploadRequest(cli, region, bucket, storageClass, isoInfo, force)
 	if err != nil {
 		return err
 	}
@@ -339,6 +323,151 @@ func uploadISO(accessKeyID, accessKey, region, bucket, storageClass, isoFilename
 	return db.UpdateIsoStatus(isoInfo.ID, types.IsoUploaded)
 }
 
+func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, isoFilename, masterKey string,
+	partSize int, saveParts, force bool) error {
+	isoFile, isoInfo, parts, err := prepareUploadParts(isoFilename, partSize, false)
+	if err != nil {
+		return err
+	}
+	defer isoFile.Close()
+
+	// iso size need add salt block size
+	isoInfo.Size += crypto.SaltLen()
+	isoInfo.HashBase64 = ""
+	request, err := prepareUploadRequest(cli, region, bucket, storageClass, isoInfo, force)
+	if err != nil {
+		return err
+	}
+	if request == nil {
+		fmt.Printf("%s is already in region %s, bucket %s, no need upload again !\n",
+			isoFilename, region, bucket)
+		return nil
+	}
+
+	partsHash := [][]byte{}
+
+	var start, end int64
+	var failParts []int
+	for i, p := range parts {
+		// add salt len for the last part
+		if i == len(parts)-1 {
+			p.Size += crypto.SaltLen()
+		}
+
+		if i == 0 {
+			end = int64(p.Size - crypto.SaltLen())
+		} else {
+			start = end
+			end += int64(p.Size)
+		}
+
+		if p.Status == types.PartUploaded {
+			logrus.Infof("%s's part %d was uploaded successfully, skip new upload", isoFilename, p.PartNo)
+			h, err := lomohash.DecpdeHashBase64(p.HashBase64)
+			if err != nil {
+				return errors.Wrapf(err, "while decode part %d's base64 hash %s", i+1, p.HashBase64)
+			}
+			partsHash = append(partsHash, h)
+			continue
+		}
+
+		logrus.Infof("Uploading %s's part %d [%d, %d]", isoFilename, p.PartNo, start, end)
+
+		// create a local tmpfile and save intermittent part
+		tmpFile, err := os.CreateTemp("", "part")
+		if err != nil {
+			return err
+		}
+		tmpFilename := tmpFile.Name()
+		defer os.Remove(tmpFilename)
+		defer tmpFile.Close()
+
+		prs := lomoio.NewFilePartReadSeeker(isoFile, start, end)
+		h, err := encryptLocalFile(prs, tmpFile, masterKey, i == 0)
+		if err != nil {
+			return err
+		}
+		p.HashHex = lomohash.CalculateHashHex(h)
+		p.HashBase64 = lomohash.CalculateHashBase64(h)
+
+		_, err = tmpFile.Seek(0, io.SeekStart)
+		if err != nil {
+			return err
+		}
+		p.Etag, err = cli.Upload(int64(p.PartNo), int64(p.Size), request, tmpFile, p.HashBase64)
+		if err != nil {
+			failParts = append(failParts, p.PartNo)
+			logrus.Infof("Upload %s's part number %d:%s", isoFilename, p.PartNo, err)
+			err = db.UpdatePartStatus(p.IsoID, p.PartNo, types.PartUploadFailed)
+			if err != nil {
+				logrus.Infof("Update %s's part number %d status %s:%s", isoFilename, p.PartNo,
+					types.PartUploadFailed, err)
+			}
+			continue
+		}
+		partsHash = append(partsHash, h)
+		err = db.UpdatePartEtagAndStatusHash(p.IsoID, p.PartNo, p.Etag, p.HashHex, p.HashBase64, types.PartUploaded)
+		if err != nil {
+			logrus.Infof("Update %s's part number %d status %s:%s", isoFilename, p.PartNo,
+				types.PartUploaded, err)
+		}
+		logrus.Infof("Uploading %s's part %d is done!", isoFilename, p.PartNo)
+		if saveParts {
+			err = tmpFile.Close()
+			if err != nil {
+				return err
+			}
+			err = os.Rename(tmpFilename, isoFilename+".part"+strconv.Itoa(i+1))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(failParts) != 0 {
+		return errors.Errorf("Parts %v failed to upload", failParts)
+	}
+
+	isoInfo.HashBase64, err = lomohash.ConcatAndCalculateBase64Hash(partsHash)
+	if err != nil {
+		return errors.Wrapf(err, "while encode iso base64 hash %v", partsHash)
+	}
+	err = cli.CompleteMultipartUpload(request, parts, isoInfo.HashBase64)
+	if err != nil {
+		logrus.Warnf("Upload %s fail: %s", isoFilename, err)
+		return err
+	}
+	fmt.Printf("%s is uploaded to region %s, bucket %s successfully!\n",
+		isoFilename, region, bucket)
+
+	return db.UpdateIsoStatusHash(isoInfo.ID, isoInfo.HashBase64, types.IsoUploaded)
+}
+
+func uploadISO(accessKeyID, accessKey, region, bucket, storageClass, isoFilename, masterKey string,
+	partSize int, saveParts, force bool) error {
+	cli, err := clients.NewAWSClient(accessKeyID, accessKey, region)
+	if err != nil {
+		return err
+	}
+
+	// check metadata file firstly
+	err = uploadISOMetafile(cli, bucket, storageClass, isoFilename, masterKey)
+	if err != nil {
+		return err
+	}
+
+	if force {
+		err = db.ResetISOUploadInfo(isoFilename)
+		if err != nil {
+			return err
+		}
+	}
+	if masterKey == "" {
+		return uploadRawParts(cli, region, bucket, storageClass, isoFilename, partSize, saveParts, force)
+	}
+	return uploadEncryptParts(cli, region, bucket, storageClass, isoFilename, masterKey, partSize, saveParts, force)
+}
+
 func uploadISOs(ctx *cli.Context) error {
 	partSize, err := datasize.ParseString(ctx.String("part-size"))
 	if err != nil {
@@ -363,6 +492,7 @@ func uploadISOs(ctx *cli.Context) error {
 	region := ctx.String("awsBucketRegion")
 	bucket := ctx.String("awsBucketName")
 	saveParts := ctx.Bool("save-parts")
+	force := ctx.Bool("force")
 
 	if len(ctx.Args()) == 0 {
 		return errors.New("Please supply one iso file name at least, or -a to upload all files not uploaded")
@@ -373,9 +503,19 @@ func uploadISOs(ctx *cli.Context) error {
 		return err
 	}
 
+	masterKey := ctx.String("encrypt-key")
+	if ctx.Bool("no-encrypt") {
+		masterKey = ""
+	} else if masterKey == "" {
+		masterKey, err = getMasterKey()
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, isoFilename := range ctx.Args() {
 		err = uploadISO(accessKeyID, secretAccessKey, region, bucket, storageClass,
-			isoFilename, int(partSize), saveParts)
+			isoFilename, masterKey, int(partSize), saveParts, force)
 		if err != nil {
 			return err
 		}

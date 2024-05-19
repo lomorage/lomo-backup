@@ -10,6 +10,10 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+func SaltLen() int {
+	return aes.BlockSize
+}
+
 type Encryptor struct {
 	sreader *lomoio.CryptoStreamReader
 }
@@ -24,14 +28,18 @@ func newCipherStream(key, iv []byte) (cipher.Stream, error) {
 }
 
 // Encrytor wrap io.CryptStreamReader and create ciper.Stream automatically
-func NewEncryptor(r io.ReadSeeker, key, iv []byte) (*Encryptor, error) {
+func NewEncryptor(r io.ReadSeeker, key, iv []byte, hasHeader bool) (*Encryptor, error) {
 	stream, err := newCipherStream(key, iv)
 	if err != nil {
 		return nil, err
 	}
 
 	en := &Encryptor{}
-	en.sreader, err = lomoio.NewCryptoStreamReader(r, iv, stream)
+	if hasHeader {
+		en.sreader, err = lomoio.NewCryptoStreamReader(r, iv, stream)
+	} else {
+		en.sreader, err = lomoio.NewCryptoStreamReader(r, nil, stream)
+	}
 	return en, err
 }
 
