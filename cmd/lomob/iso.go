@@ -63,6 +63,8 @@ func mkISO(ctx *cli.Context) error {
 		isoFilename = ctx.Args()[0]
 	}
 
+	logrus.Infof("Total %d files (%s)", len(files), datasize.ByteSize(currentSizeNotInISO).HR())
+
 	for {
 		if currentSizeNotInISO < isoSize.Bytes() {
 			currSize := datasize.ByteSize(currentSizeNotInISO)
@@ -90,6 +92,9 @@ func mkISO(ctx *cli.Context) error {
 			len(files)-len(leftFiles), datasize.ByteSize(size).HR(), filename,
 			len(leftFiles), datasize.ByteSize(currentSizeNotInISO-size).HR())
 
+		if len(leftFiles) == 0 {
+			return nil
+		}
 		if len(ctx.Args()) > 0 {
 			fmt.Println("Please supply another filename")
 			return nil

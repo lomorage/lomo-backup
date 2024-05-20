@@ -468,6 +468,67 @@ func TestCryptoStreamReaderSeekReadEncrypt(t *testing.T) {
 	verifyCryptoReadSeek(t, expectFile, r, 101, -1, -1, io.SeekCurrent, expectStream)
 }
 
+func TestCryptoStreamReaderEncryptLargeBuffer(t *testing.T) {
+	// use large buffer to read multiple times, and value should be same
+	nl := 16
+	nonce := make([]byte, nl)
+	for i := 0; i < nl; i++ {
+		nonce[i] = byte(i)
+	}
+
+	f, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer f.Close()
+
+	key, _ := hex.DecodeString("6368616e676520746869732070617373")
+
+	stream := getCryptoStream(t, key, nonce)
+
+	prs := NewFilePartReadSeeker(f, 0, 100)
+	r, err := NewCryptoStreamReader(prs, nonce, stream)
+	require.Nil(t, err)
+
+	expectFile, err := os.Open(testFilename)
+	require.Nil(t, err)
+	defer expectFile.Close()
+
+	// initial read will return nonce
+	buf := make([]byte, 200)
+	n, err := r.Read(buf)
+	require.Nil(t, err)
+	require.EqualValues(t, len(nonce), n)
+	require.EqualValues(t, nonce, buf[:n])
+
+	expectStream := getCryptoStream(t, key, nonce)
+
+	verifyCryptoLargeBuffer(t, expectFile, expectStream, 100, r)
+
+	prs.SetStartEnd(100, 200)
+	verifyCryptoLargeBuffer(t, expectFile, expectStream, 100, r)
+
+	prs.SetStartEnd(200, 201)
+	verifyCryptoLargeBuffer(t, expectFile, expectStream, 1, r)
+
+	prs.SetStartEnd(201, 300)
+	verifyCryptoLargeBuffer(t, expectFile, expectStream, 99, r)
+}
+
+func verifyCryptoLargeBuffer(t *testing.T, expectReader io.Reader, expectStream cipher.Stream,
+	expectLen int, stream *CryptoStreamReader) {
+	expectReadBuffer := make([]byte, expectLen)
+	expectBuffer := make([]byte, expectLen)
+	expectSize, err := expectReader.Read(expectReadBuffer)
+	require.Nil(t, err)
+	expectStream.XORKeyStream(expectBuffer, expectReadBuffer)
+
+	buffer := make([]byte, expectLen+100)
+	size, err := stream.Read(buffer)
+	require.Nil(t, err, "read lengh: %d", size)
+
+	require.Equal(t, expectSize, size)
+	require.Equal(t, expectBuffer, buffer[:size], "expect len: %d", expectLen)
+}
+
 func TestCryptoStreamReaderSeekReadEncryptNoNonce(t *testing.T) {
 	nl := 16
 	nonce := make([]byte, nl)

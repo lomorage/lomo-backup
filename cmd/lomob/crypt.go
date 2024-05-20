@@ -8,10 +8,13 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
 	"syscall"
 
 	"github.com/lomorage/lomo-backup/common/crypto"
+	"github.com/lomorage/lomo-backup/common/datasize"
 	lomohash "github.com/lomorage/lomo-backup/common/hash"
+	lomoio "github.com/lomorage/lomo-backup/common/io"
 	"github.com/urfave/cli"
 	"golang.org/x/term"
 )
@@ -65,17 +68,18 @@ func encryptCmd(ctx *cli.Context) error {
 		return errors.New("usage: [input filename] [[output filename]]. If output filename is not given, it will be <intput filename>.enc")
 	}
 
-	salt, err := genSalt(ifilename)
-	if err != nil {
-		return err
-	}
-
+	var err error
 	masterKey := ctx.String("encrypt-key")
 	if masterKey == "" {
 		masterKey, err = getMasterKey()
 		if err != nil {
 			return err
 		}
+	}
+
+	salt, err := genSalt(ifilename)
+	if err != nil {
+		return err
 	}
 
 	src, err := os.Open(ifilename)
@@ -91,9 +95,96 @@ func encryptCmd(ctx *cli.Context) error {
 	defer dst.Close()
 
 	fmt.Printf("Start encrypt '%s', and save output to '%s'\n", ifilename, ofilename)
-	_, _, err = encryptLocalFile(src, dst, []byte(masterKey), salt, true)
+
+	ps := ctx.String("part-size")
+	if ps == "" {
+		_, err = encryptLocalFile(src, dst, []byte(masterKey), salt, true)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Finish encryption!")
+
+		return nil
+	}
+
+	// Derive key from passphrase using Argon2
+	// TODO: Using IV as salt for simplicity, change to different salt?
+	encryptKey := crypto.DeriveKeyFromMasterKey([]byte(masterKey), salt)
+
+	partSize, err := datasize.ParseString(ps)
 	if err != nil {
 		return err
+	}
+
+	stat, err := src.Stat()
+	if err != nil {
+		return err
+	}
+
+	index := 1
+	remaining := stat.Size()
+	var (
+		start, end, curr, partLength int64
+		encryptor                    *crypto.Encryptor
+		prs                          *lomoio.FilePartReadSeeker
+	)
+	for curr = 0; remaining != 0; curr += partLength {
+		if remaining < int64(partSize) {
+			partLength = remaining
+		} else {
+			partLength = int64(partSize)
+		}
+
+		if curr == 0 {
+			end = int64(int(partLength) - crypto.SaltLen())
+		} else {
+			start = end
+			end += partLength
+		}
+
+		// create a local tmpfile and save intermittent part
+		pf, err := os.Create(ofilename + ".part" + strconv.Itoa(index))
+		if err != nil {
+			return err
+		}
+		defer pf.Close()
+
+		mw := io.MultiWriter(dst, pf)
+
+		if prs == nil {
+			prs = lomoio.NewFilePartReadSeeker(src, start, end)
+		} else {
+			prs.SetStartEnd(start, end)
+		}
+
+		if encryptor == nil {
+			encryptor, err = crypto.NewEncryptor(prs, encryptKey, salt, false)
+			if err != nil {
+				return err
+			}
+			n, err := mw.Write(salt)
+			if err != nil {
+				return err
+			}
+			if n != len(salt) {
+				return fmt.Errorf("write %d byte salt while expecting %d", n, len(salt))
+			}
+		}
+
+		n, err := io.Copy(mw, encryptor)
+		if err != nil {
+			return err
+		}
+
+		if n != end-start {
+			return fmt.Errorf("write %d byte salt while expecting %d btw [%d, %d]", n, end-start, start, end)
+		}
+
+		fmt.Printf("Created '%s'\n", pf.Name())
+
+		index++
+		remaining -= end - start
 	}
 
 	fmt.Println("Finish encryption!")
@@ -101,20 +192,20 @@ func encryptCmd(ctx *cli.Context) error {
 	return nil
 }
 
-func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey, iv []byte, hasHeader bool) ([]byte, []byte, error) {
+func encryptLocalFile(src io.ReadSeeker, dst io.Writer, masterKey, iv []byte, hasHeader bool) ([]byte, error) {
 	// Derive key from passphrase using Argon2
 	// TODO: Using IV as salt for simplicity, change to different salt?
 	encryptKey := crypto.DeriveKeyFromMasterKey(masterKey, iv)
 	encryptor, err := crypto.NewEncryptor(src, encryptKey, iv, hasHeader)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	_, err = io.Copy(dst, encryptor)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return encryptor.GetHashOrig(), encryptor.GetHashEncrypt(), nil
+	return encryptor.GetHashEncrypt(), nil
 }
 
 func decryptLocalFile(ctx *cli.Context) error {
