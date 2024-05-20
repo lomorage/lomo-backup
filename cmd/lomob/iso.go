@@ -63,6 +63,8 @@ func mkISO(ctx *cli.Context) error {
 		isoFilename = ctx.Args()[0]
 	}
 
+	logrus.Infof("Total %d files (%s)", len(files), datasize.ByteSize(currentSizeNotInISO).HR())
+
 	for {
 		if currentSizeNotInISO < isoSize.Bytes() {
 			currSize := datasize.ByteSize(currentSizeNotInISO)
@@ -82,14 +84,38 @@ func mkISO(ctx *cli.Context) error {
 				datasize.ByteSize(iso.Size).HR())
 		}
 
-		size, filename, leftFiles, err := createIso(isoSize.Bytes(), isoFilename, scanRootDirs, files)
+		size, filename, leftFiles, notExistFiles, err := createIso(isoSize.Bytes(), isoFilename, scanRootDirs, files)
 		if err != nil {
 			return err
 		}
-		logrus.Infof("%d files (%s) are added into %s, and %d files (%s) need to be added",
-			len(files)-len(leftFiles), datasize.ByteSize(size).HR(), filename,
-			len(leftFiles), datasize.ByteSize(currentSizeNotInISO-size).HR())
+		if len(notExistFiles) == 0 {
+			logrus.Infof("%d files (%s) are added into %s, and %d files (%s) need to be added",
+				len(files)-len(leftFiles), datasize.ByteSize(size).HR(), filename,
+				len(leftFiles), datasize.ByteSize(currentSizeNotInISO-size).HR())
+		} else {
+			fileIDs := bytes.Buffer{}
+			notExistSizes := 0
+			for _, f := range notExistFiles {
+				notExistSizes += f.Size
+				fileIDs.WriteString(strconv.Itoa(f.ID))
+				fileIDs.WriteString(",")
+			}
+			logrus.Infof("%d files (%s) are added into %s, %d files (%s) need to be added, %d files (%s) not exist",
+				len(files)-len(leftFiles), datasize.ByteSize(size).HR(), filename,
+				len(leftFiles), datasize.ByteSize(currentSizeNotInISO-size).HR(),
+				len(notExistFiles), datasize.ByteSize(notExistSizes).HR())
 
+			ids := fileIDs.String()
+			_, err = db.DeleteBatchFiles(strings.Trim(ids, ","))
+			if err != nil {
+				return err
+			}
+			size += uint64(notExistSizes)
+		}
+
+		if len(leftFiles) == 0 {
+			return nil
+		}
 		if len(ctx.Args()) > 0 {
 			fmt.Println("Please supply another filename")
 			return nil
@@ -125,18 +151,19 @@ func createFileInStaging(srcFile, dstFile string) error {
 }
 
 func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
-	files []*types.FileInfo) (uint64, string, []*types.FileInfo, error) {
+	files []*types.FileInfo) (uint64, string, []*types.FileInfo, []*types.FileInfo, error) {
 	stagingDir, err := os.MkdirTemp("", "lomobackup-")
 	if err != nil {
-		return 0, "", nil, err
+		return 0, "", nil, nil, err
 	}
 	defer os.RemoveAll(stagingDir)
 
 	const seperater = ','
 	var (
-		fileCount int
-		filesSize uint64
-		end       time.Time
+		fileCount     int
+		filesSize     uint64
+		end           time.Time
+		notExistFiles []*types.FileInfo
 	)
 	start := futuretime
 	fileIDs := bytes.Buffer{}
@@ -164,6 +191,11 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 
 		err = createFileInStaging(srcFile, dstFile)
 		if err != nil {
+			if os.IsNotExist(err) {
+				notExistFiles = append(notExistFiles, f)
+				logrus.Warnf("'%s' not exist anymore", srcFile)
+				continue
+			}
 			logrus.Warnf("Add %s into %s:%s: %s", srcFile, isoFilename, dstFile, err)
 			continue
 		}
@@ -207,18 +239,18 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 			stagingDir).CombinedOutput()
 		if err != nil {
 			fmt.Println(string(out))
-			return 0, "", nil, err
+			return 0, "", nil, nil, err
 		}
 
 		fileInfo, err := os.Stat(isoFilename)
 		if err != nil {
-			return 0, "", nil, err
+			return 0, "", nil, nil, err
 		}
 		isoInfo := &types.ISOInfo{Name: isoFilename, Size: int(fileInfo.Size())}
 
 		hash, err := lomohash.CalculateHashFile(isoFilename)
 		if err != nil {
-			return 0, "", nil, err
+			return 0, "", nil, nil, err
 		}
 		isoInfo.SetHashLocal(hash)
 		// create db entry and update file info
@@ -230,10 +262,10 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		}
 
 		logrus.Infof("Takes %s to update iso_id for %d files in DB", time.Since(start).Truncate(time.Second).String(), count)
-		return filesSize, isoFilename, files[idx+1:], err
+		return filesSize, isoFilename, files[idx+1:], notExistFiles, err
 	}
 
-	return filesSize, isoFilename, nil, nil
+	return filesSize, isoFilename, nil, nil, nil
 }
 
 func listISO(ctx *cli.Context) error {

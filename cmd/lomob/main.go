@@ -390,6 +390,10 @@ func main() {
 							Usage:  "Master key to encrypt current upload file",
 							EnvVar: "LOMOB_MASTER_KEY",
 						},
+						cli.StringFlag{
+							Name:  "part-size,p",
+							Usage: "Size of each upload partition. KB=1000 Byte. 0 means no part. Mainly for local test purpose",
+						},
 					},
 				},
 				{

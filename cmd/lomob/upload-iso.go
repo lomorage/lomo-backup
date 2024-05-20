@@ -341,6 +341,11 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 	}
 
 	salt := decoded[:crypto.SaltLen()]
+
+	// Derive key from passphrase using Argon2
+	// TODO: Using IV as salt for simplicity, change to different salt?
+	encryptKey := crypto.DeriveKeyFromMasterKey([]byte(masterKey), salt)
+
 	// iso size need add salt block size so as to compare with remote size
 	isoInfo.Size += crypto.SaltLen()
 	isoInfo.HashRemote = ""
@@ -356,8 +361,12 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 
 	partsHash := [][]byte{}
 
-	var start, end int64
-	var failParts []int
+	var (
+		start, end int64
+		failParts  []int
+		encryptor  *crypto.Encryptor
+		prs        *lomoio.FilePartReadSeeker
+	)
 	for i, p := range parts {
 		// add salt len for the last part
 		if i == len(parts)-1 {
@@ -392,18 +401,47 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 		defer os.Remove(tmpFilename)
 		defer tmpFile.Close()
 
-		prs := lomoio.NewFilePartReadSeeker(isoFile, start, end)
-		hl, hr, err := encryptLocalFile(prs, tmpFile, []byte(masterKey), salt, i == 0)
+		if prs == nil {
+			prs = lomoio.NewFilePartReadSeeker(isoFile, start, end)
+		} else {
+			prs.SetStartEnd(start, end)
+		}
+
+		hr := sha256.New()
+		mw := io.MultiWriter(hr, tmpFile)
+
+		if encryptor == nil {
+			encryptor, err = crypto.NewEncryptor(prs, encryptKey, salt, false)
+			if err != nil {
+				return err
+			}
+			n, err := mw.Write(salt)
+			if err != nil {
+				return err
+			}
+			if n != len(salt) {
+				return fmt.Errorf("write %d byte salt while expecting %d", n, len(salt))
+			}
+		}
+
+		n, err := io.Copy(mw, encryptor)
 		if err != nil {
 			return err
 		}
-		p.SetHashLocal(hl)
-		p.SetHashRemote(hr)
 
+		if n != end-start {
+			return fmt.Errorf("write %d byte salt while expecting %d btw [%d, %d]", n, end-start, start, end)
+		}
+
+		hrData := hr.Sum(nil)
+		p.SetHashRemote(hrData)
+
+		// seek to beginning for upload
 		_, err = tmpFile.Seek(0, io.SeekStart)
 		if err != nil {
 			return err
 		}
+
 		p.Etag, err = cli.Upload(int64(p.PartNo), int64(p.Size), request, tmpFile, p.HashRemote)
 		if err != nil {
 			failParts = append(failParts, p.PartNo)
@@ -415,7 +453,7 @@ func uploadEncryptParts(cli *clients.AWSClient, region, bucket, storageClass, is
 			}
 			continue
 		}
-		partsHash = append(partsHash, hr)
+		partsHash = append(partsHash, hrData)
 		err = db.UpdatePartEtagAndStatusHash(p.IsoID, p.PartNo, p.Etag, p.HashLocal, p.HashRemote, types.PartUploaded)
 		if err != nil {
 			logrus.Infof("Update %s's part number %d status %s:%s", isoFilename, p.PartNo,
@@ -479,12 +517,16 @@ func uploadISO(accessKeyID, accessKey, region, bucket, storageClass, isoFilename
 }
 
 func uploadISOs(ctx *cli.Context) error {
-	partSize, err := datasize.ParseString(ctx.String("part-size"))
+	ps, err := datasize.ParseString(ctx.String("part-size"))
 	if err != nil {
 		return err
 	}
+	partSize := int(ps)
 	if partSize < 5*1024*1024 {
 		return errors.New("part size must be larger than 5*1024*1024=5242880")
+	}
+	if partSize%crypto.SaltLen() != 0 || (partSize-crypto.SaltLen())%crypto.SaltLen() != 0 {
+		return errors.Errorf("part size must be able to divided by salt length '%d'", crypto.SaltLen())
 	}
 
 	err = initDB(ctx.GlobalString("db"))
@@ -525,7 +567,7 @@ func uploadISOs(ctx *cli.Context) error {
 
 	for _, isoFilename := range ctx.Args() {
 		err = uploadISO(accessKeyID, secretAccessKey, region, bucket, storageClass,
-			isoFilename, masterKey, int(partSize), saveParts, force)
+			isoFilename, masterKey, partSize, saveParts, force)
 		if err != nil {
 			return err
 		}

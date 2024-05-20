@@ -23,6 +23,12 @@ func (prs *FilePartReadSeeker) Size() int64 {
 	return prs.end - prs.start
 }
 
+func (prs *FilePartReadSeeker) SetStartEnd(start, end int64) {
+	prs.start = start
+	prs.end = end
+	prs.current = start
+}
+
 func (prs *FilePartReadSeeker) Read(p []byte) (n int, err error) {
 	currBegin := prs.current
 	defer func() {

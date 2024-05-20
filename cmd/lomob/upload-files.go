@@ -327,7 +327,7 @@ func uploadEncryptFileToS3(cli *clients.AWSClient, bucket, storageClass, filenam
 	tmpFileName := tmpFile.Name()
 	defer tmpFile.Close()
 
-	_, hash, err := encryptLocalFile(src, tmpFile, []byte(masterKey), salt, true)
+	hash, err := encryptLocalFile(src, tmpFile, []byte(masterKey), salt, true)
 	if err != nil {
 		return "", err
 	}

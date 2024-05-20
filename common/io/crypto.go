@@ -96,7 +96,7 @@ func (r *CryptoStreamReader) Read(p []byte) (n int, err error) {
 
 	r.offset += n
 
-	r.stream.XORKeyStream(p, buf)
+	r.stream.XORKeyStream(p[:n], buf[:n])
 
 	_, err = r.hashEncrypt.Write(p[:n])
 	if err != nil {
