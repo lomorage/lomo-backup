@@ -23,6 +23,8 @@ const (
 	updateBatchFilesIsoIDStmt        = "update files set iso_id=%d where id in (%s)"
 	updateFileIsoIDAndRemoteHashStmt = "update files set iso_id=?, hash_remote=? where id=?"
 
+	deleteBatchFilesStmt = "delete from files where id in (%s)"
+
 	getIsoByNameStmt = "select id, size, hash_local, hash_remote, region, bucket, upload_id, upload_key," +
 		" create_time from isos where name=?"
 	listIsosStmt  = "select id, name, size, status, region, bucket, hash_local, hash_remote, create_time from isos"
@@ -200,6 +202,21 @@ func (db *DB) CreateIsoWithFileIDs(iso *types.ISOInfo, fileIDs string) (int, int
 		},
 	)
 	return int(isoID), int(updatedFiles), err
+}
+
+func (db *DB) DeleteBatchFiles(fileIDs string) (int, error) {
+	var updatedFiles int64
+	err := db.retryIfLocked(fmt.Sprintf("delete files %s", fileIDs),
+		func(tx *sql.Tx) error {
+			res, err := tx.Exec(fmt.Sprintf(deleteBatchFilesStmt, fileIDs))
+			if err != nil {
+				return err
+			}
+			updatedFiles, err = res.RowsAffected()
+			return err
+		},
+	)
+	return int(updatedFiles), err
 }
 
 func (db *DB) ResetISOUploadInfo(isoFilename string) error {
