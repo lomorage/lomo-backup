@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"io"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -69,6 +70,10 @@ func NewAWSClient(keyID, key, region string) (*AWSClient, error) {
 	sess, err := session.NewSession()
 	if err != nil {
 		return nil, err
+	}
+	if os.Getenv("LOCALSTACK_ENDPOINT") != "" {
+		cfg.S3ForcePathStyle = aws.Bool(true)
+		cfg.Endpoint = aws.String(os.Getenv("LOCALSTACK_ENDPOINT"))
 	}
 	return &AWSClient{region: region, svc: s3.New(sess, cfg)}, nil
 }

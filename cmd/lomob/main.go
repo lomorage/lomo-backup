@@ -47,7 +47,7 @@ func main() {
 				cli.StringFlag{
 					Name:  "ignore-files, if",
 					Usage: "List of ignored files, separated by comma",
-					Value: ".DS_Store,._.DS_Store,Thumbs.db",
+					Value: ".DS_Store,._.DS_Store,Thumbs.db,.git",
 				},
 				cli.StringFlag{
 					Name:  "ignore-dirs, in",

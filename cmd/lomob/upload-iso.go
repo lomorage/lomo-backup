@@ -567,7 +567,7 @@ func uploadISOs(ctx *cli.Context) error {
 
 	for _, isoFilename := range ctx.Args() {
 		err = uploadISO(accessKeyID, secretAccessKey, region, bucket, storageClass,
-			isoFilename, masterKey, partSize, saveParts, force)
+			filepath.Clean(isoFilename), masterKey, partSize, saveParts, force)
 		if err != nil {
 			return err
 		}

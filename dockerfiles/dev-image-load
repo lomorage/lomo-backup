@@ -1,0 +1,6 @@
+FROM "lomorage/lomo-backup:build-stage1"
+
+COPY ./dockerfiles/entrypoint-build.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+
+ENTRYPOINT /entrypoint.sh "$@"

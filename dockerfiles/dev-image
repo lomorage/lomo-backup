@@ -4,8 +4,7 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV GOPATH=/go
 
 RUN apt-get -yqq update && apt-get install -yq --no-install-recommends man-db vim build-essential \
-  sqlite3 curl apt-transport-https ca-certificates software-properties-common \
-  && apt-get install -yq sqlite3 \
+  sqlite3 curl apt-transport-https ca-certificates software-properties-common sqlite3 sudo genisoimage \
   && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 
 # install docker
@@ -17,3 +16,5 @@ RUN apt-get -yqq update && apt-get install -yq docker-ce && apt-get clean autocl
 RUN curl -fsSL https://go.dev/dl/go1.21.0.linux-amd64.tar.gz | tar xz -C /usr/local
 
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+COPY ./localstack_3.4.0.tar.gz /root/
