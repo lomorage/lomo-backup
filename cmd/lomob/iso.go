@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/djherbis/times"
 	"github.com/lomorage/lomo-backup/common"
 	"github.com/lomorage/lomo-backup/common/datasize"
 	lomohash "github.com/lomorage/lomo-backup/common/hash"
@@ -28,12 +28,20 @@ import (
 var futuretime = time.Date(3000, time.December, 31, 0, 0, 0, 0, time.Now().UTC().Location())
 
 func mkISO(ctx *cli.Context) error {
-	isoSize, err := datasize.ParseString(ctx.String("iso-size"))
+	err := initLogLevel(ctx.GlobalInt("log-level"))
 	if err != nil {
 		return err
 	}
 
-	err = initLogLevel(ctx.GlobalInt("log-level"))
+	debug := ctx.Bool("debug")
+	if debug {
+		err = initLogLevel(int(logrus.DebugLevel))
+		if err != nil {
+			return err
+		}
+	}
+
+	isoSize, err := datasize.ParseString(ctx.String("iso-size"))
 	if err != nil {
 		return err
 	}
@@ -84,7 +92,7 @@ func mkISO(ctx *cli.Context) error {
 				datasize.ByteSize(iso.Size).HR())
 		}
 
-		size, filename, leftFiles, notExistFiles, err := createIso(isoSize.Bytes(), isoFilename, scanRootDirs, files)
+		size, filename, leftFiles, notExistFiles, err := createIso(isoSize.Bytes(), isoFilename, scanRootDirs, files, debug)
 		if err != nil {
 			return err
 		}
@@ -125,14 +133,6 @@ func mkISO(ctx *cli.Context) error {
 	}
 }
 
-func keepTime(src, dst string) error {
-	ts, err := times.Stat(src)
-	if err != nil {
-		return err
-	}
-	return os.Chtimes(dst, ts.AccessTime(), ts.ModTime())
-}
-
 func createFileInStaging(srcFile, dstFile string) error {
 	src, err := os.Open(srcFile)
 	if err != nil {
@@ -150,13 +150,17 @@ func createFileInStaging(srcFile, dstFile string) error {
 	return err
 }
 
-func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
-	files []*types.FileInfo) (uint64, string, []*types.FileInfo, []*types.FileInfo, error) {
+func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string, files []*types.FileInfo,
+	debug bool) (uint64, string, []*types.FileInfo, []*types.FileInfo, error) {
 	stagingDir, err := os.MkdirTemp("", "lomobackup-")
 	if err != nil {
 		return 0, "", nil, nil, err
 	}
-	defer os.RemoveAll(stagingDir)
+	if debug {
+		logrus.Infof("Staging directory '%s' is kept for debugging", stagingDir)
+	} else {
+		defer os.RemoveAll(stagingDir)
+	}
 
 	const seperater = ','
 	var (
@@ -207,7 +211,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 			end = f.ModTime
 		}
 
-		err = keepTime(srcFile, dstFile)
+		err = common.KeepTime(srcFile, dstFile, false)
 		if err != nil {
 			logrus.Warnf("Keep file original timestamp %s: %s", srcFile, err)
 		}
@@ -222,12 +226,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string,
 		}
 
 		// change all destination directory's last modify time and access time
-		for dst, src := range dirsMap {
-			err = keepTime(src, dst)
-			if err != nil {
-				logrus.Warnf("Keep dir original timestamp %s: %s", src, err)
-			}
-		}
+		common.KeepDirsTime(stagingDir, dirsMap)
 
 		name := fmt.Sprintf("%d-%02d-%02d--%d-%02d-%02d", start.Year(), start.Month(), start.Day(),
 			end.Year(), end.Month(), end.Day())
@@ -333,6 +332,10 @@ func fileInfoFor(path string, fs filesystem.FileSystem, currNode treeprint.Tree)
 	if err != nil {
 		return err
 	}
+
+	slices.SortStableFunc(files, func(a, b os.FileInfo) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
 
 	for _, file := range files {
 		t := file.ModTime()

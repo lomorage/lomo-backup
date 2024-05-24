@@ -68,6 +68,7 @@ func scanDir(ctx *cli.Context) (err error) {
 	dirs = make(map[string]scanDirInfo)
 	lock = &sync.Mutex{}
 
+	var wg sync.WaitGroup
 	ch := make(chan scan.FileCallback, nthreads)
 	go func() {
 		for {
@@ -76,10 +77,17 @@ func scanDir(ctx *cli.Context) (err error) {
 			if err != nil {
 				logrus.Warnf("Error handling file %s: %s", cb.Path, err)
 			}
+			wg.Done()
 		}
 	}()
 
-	return scan.Directory(scanRootDir, ignoreFiles, ignoreDirs, ch)
+	err = scan.Directory(scanRootDir, ignoreFiles, ignoreDirs, &wg, ch)
+	if err != nil {
+		return err
+	}
+
+	wg.Wait()
+	return nil
 }
 
 func selectOrInsertScanRootDir() error {

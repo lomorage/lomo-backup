@@ -1,0 +1,3 @@
+Uploading un-encrypted metadata file 2021-04-26--2021-04-26.iso.meta.txt
+2021-04-26--2021-04-26.iso.meta.txt is already in bucket lomorage, no need upload again !
+2021-04-26--2021-04-26.iso is already in region us-east-1, bucket lomorage, no need upload again !

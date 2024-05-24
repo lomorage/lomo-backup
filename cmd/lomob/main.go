@@ -47,7 +47,7 @@ func main() {
 				cli.StringFlag{
 					Name:  "ignore-files, if",
 					Usage: "List of ignored files, separated by comma",
-					Value: ".DS_Store,._.DS_Store,Thumbs.db",
+					Value: ".DS_Store,._.DS_Store,Thumbs.db,.git",
 				},
 				cli.StringFlag{
 					Name:  "ignore-dirs, in",
@@ -78,7 +78,11 @@ func main() {
 						},
 						cli.StringFlag{
 							Name:  "store-dir,p",
-							Usage: "Directory to store the ISOs. It's urrent directory by default",
+							Usage: "Directory to store the ISOs. It's current directory by default",
+						},
+						cli.BoolFlag{
+							Name:  "debug",
+							Usage: "Keep temp directory for debugging purpose, and also dump more debug level log",
 						},
 					},
 				},

@@ -1,0 +1,20 @@
+[Unit]
+Description=Localstack service
+After=network-online.target docker.socket firewalld.service containerd.service time-set.target docker.service
+Wants=network-online.target containerd.service docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+# the default is not to use systemd for cgroups because the delegate issues still
+# exists and systemd currently does not support the cgroup feature set required
+# for containers run by docker
+ExecStart=docker run --name localstack -p 4566:4566 -p 4510-4559:4510-4559 localstack/localstack:3.4.0
+ExecReload=docker rm -f localstack
+RestartSec=2
+Restart=always
+
+WillMode = process
+
+[Install]
+WantedBy=multi-user.target

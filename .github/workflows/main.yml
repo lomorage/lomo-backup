@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: make lint
 
-  install:
+  unit-test:
     runs-on: ubuntu-22.04
     container:
       image: lomorage/lomo-backup:1.0
@@ -28,11 +28,9 @@ jobs:
       GOFLAGS: "-buildvcs=false"
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'true'
-      - run: make install
+      - run: make unit-tests
 
-  test:
+  e2e-test:
     runs-on: ubuntu-22.04
     container:
       image: lomorage/lomo-backup:1.0
@@ -40,8 +38,15 @@ jobs:
       PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
       GOBIN: /usr/local/bin
       GOFLAGS: "-buildvcs=false"
+      WORKDIR: /go/src/github.com/lomorage/lomo-backup
     steps:
+      - run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
-      - run: make test
+          submodules: true
+          fetch-depth: 0
+      - run: apt install -y tree rsync
+      - run: cd test/data; find . | while read -r file; do git log -1 --format="%ad" --date=iso "$file" | xargs -t -I{} touch -d {} "$file"; done
+      - run: mkdir -p $WORKDIR; rsync -avz * $WORKDIR/; cd $WORKDIR; tree --si -D test/data/
+      - run: cd $WORKDIR; make install
+      - run: cd $WORKDIR; make e2e-tests

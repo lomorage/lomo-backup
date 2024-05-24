@@ -139,10 +139,10 @@ func prepareUploadRequest(cli *clients.AWSClient, region, bucket, storageClass s
 			return nil, errors.Errorf("%s exists in cloud and its size is %d, but provided file size is %d",
 				isoFilename, remoteInfo.Size, isoInfo.Size)
 		}
-		if isoInfo.HashRemote != "" {
+		if isoInfo.HashRemote != "" && remoteInfo.HashRemote != "" {
 			remoteHash := strings.Split(remoteInfo.HashRemote, "-")[0]
 			if remoteHash != isoInfo.HashRemote {
-				return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided ccommonhecksum is %s",
+				return nil, errors.Errorf("%s exists in cloud and its checksum is %s, but provided checksum is %s",
 					isoFilename, remoteHash, isoInfo.HashRemote)
 			}
 		}
@@ -216,7 +216,7 @@ func uploadISOMetafile(cli *clients.AWSClient, bucket, storageClass, isoFilename
 		return err
 	}
 
-	treeBuf := []byte(tree)
+	treeBuf := []byte(tree + "\n")
 
 	metaFilename := mkIsoMetadataFilename(isoFilename)
 	err = validateISOMetafile(metaFilename, treeBuf)
@@ -567,7 +567,7 @@ func uploadISOs(ctx *cli.Context) error {
 
 	for _, isoFilename := range ctx.Args() {
 		err = uploadISO(accessKeyID, secretAccessKey, region, bucket, storageClass,
-			isoFilename, masterKey, partSize, saveParts, force)
+			filepath.Clean(isoFilename), masterKey, partSize, saveParts, force)
 		if err != nil {
 			return err
 		}

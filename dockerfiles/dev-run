@@ -4,6 +4,26 @@ ENV GOROOT=/usr/local/go
 ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 WORKDIR /go/src/github.com/lomorage/lomo-backup
 
+ARG USER_ID
+ARG USER_NAME
+ARG GROUP_ID
+ARG GROUP_NAME
+
+RUN addgroup --gid $GROUP_ID $GROUP_NAME && \
+    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $USER_NAME && \
+    usermod -aG docker $USER_NAME
+
+RUN mkdir $GOPATH/bin && chown -R $USER_ID:$GROUP_ID $GOPATH/bin
+RUN mkdir $GOPATH/pkg && chown -R $USER_ID:$GROUP_ID $GOPATH/pkg
+
+# Add user to sudo group and configure sudo without password
+RUN echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+#COPY ./dockerfiles/localstack.service /etc/systemd/system/multi-user.target.wants
+
 COPY ./dockerfiles/entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh
+
+USER $USER_NAME
+
 ENTRYPOINT /entrypoint.sh "$@"
