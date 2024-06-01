@@ -3,9 +3,8 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND noninteractive
 ENV GOPATH=/go
 
-RUN apt-get -yqq update && apt-get install -yq --no-install-recommends man-db vim build-essential \
-  sqlite3 curl apt-transport-https ca-certificates software-properties-common \
-  && apt-get install -yq sqlite3 \
+RUN apt-get -yqq update && apt-get install -yq --no-install-recommends man-db vim build-essential rsync git \
+  sqlite3 curl apt-transport-https ca-certificates software-properties-common sqlite3 sudo genisoimage tree \
   && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 
 # install docker

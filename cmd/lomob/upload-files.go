@@ -224,6 +224,7 @@ func uploadFilesToS3(ctx *cli.Context) error {
 	}
 
 	for _, name := range ctx.Args() {
+		name = filepath.Clean(name)
 		fmt.Printf("Uploading file %s\n", name)
 
 		if masterKey == "" {

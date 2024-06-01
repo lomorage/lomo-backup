@@ -1,0 +1,8 @@
+FROM "lomorage/lomo-backup:build-stage1"
+
+COPY ./localstack_3.4.0.tar.gz /root/
+
+COPY ./dockerfiles/entrypoint-build.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+
+ENTRYPOINT /entrypoint.sh "$@"

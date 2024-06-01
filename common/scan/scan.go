@@ -18,9 +18,7 @@ type FileCallback struct {
 
 // Directory is to scan given root directory, and build DB tree
 func Directory(root string, ignoreFiles, ignoreDirs map[string]struct{},
-	ch chan FileCallback) error {
-	var wg sync.WaitGroup
-
+	wg *sync.WaitGroup, ch chan FileCallback) error {
 	processItem := func(path string, entry fs.DirEntry) error {
 		info, err := entry.Info()
 		if err != nil {
@@ -33,10 +31,7 @@ func Directory(root string, ignoreFiles, ignoreDirs map[string]struct{},
 		}
 
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ch <- FileCallback{Path: path, Info: info}
-		}()
+		ch <- FileCallback{Path: path, Info: info}
 		return nil
 	}
 	// Launch a goroutine for each directory
@@ -70,9 +65,6 @@ func Directory(root string, ignoreFiles, ignoreDirs map[string]struct{},
 	if err != nil {
 		return err
 	}
-
-	// Wait for all goroutines to finish
-	wg.Wait()
 
 	return nil
 }
