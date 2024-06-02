@@ -18,7 +18,7 @@ rm -f lomob.db; sqlite3 ./lomob.db < ../../common/dbx/schema/1.sql
 ./test-iso-list.sh
 
 # test upload raw
-#./test-upload-aws-raw.sh
+./test-upload-aws-raw.sh
 
 # test upload encrypt file
 #./test-upload-aws-encrypt.sh
