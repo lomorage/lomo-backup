@@ -16,3 +16,8 @@ RUN apt-get -yqq update && apt-get install -yq docker-ce && apt-get clean autocl
 RUN curl -fsSL https://go.dev/dl/go1.21.0.linux-amd64.tar.gz | tar xz -C /usr/local
 
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+RUN curl -Lo localstack-cli-3.4.0-linux-amd64-onefile.tar.gz \
+    https://github.com/localstack/localstack-cli/releases/download/v3.4.0/localstack-cli-3.4.0-linux-amd64-onefile.tar.gz; \
+    sudo tar xvzf localstack-cli-3.4.0-linux-amd64-onefile.tar.gz -C /usr/local/bin; \
+    rm localstack-cli-3.4.0-linux-amd64-onefile.tar.gz

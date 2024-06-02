@@ -22,11 +22,9 @@ localstack-tarball:
 	gzip localstack_3.4.0.tar
 
 dev-container:
-	docker build --tag "lomorage/lomo-backup:build-stage1" -f dockerfiles/dev-image .
-	docker build --tag "lomorage/lomo-backup:build-stage2" -f dockerfiles/dev-image-load .
-	docker rm -f lomo-backup-build
-	docker run --name lomo-backup-build --privileged --net host -it "lomorage/lomo-backup:build-stage2" hostname
-	docker commit lomo-backup-build lomorage/lomo-backup:1.0
+	docker build --tag "lomorage/lomo-backup:build-stage0" -f dockerfiles/dev-image .
+	docker build --tag lomorage/lomo-backup:1.0 -f dockerfiles/dev-image-merge .
+
 
 dev:
 	docker build \
