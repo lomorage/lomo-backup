@@ -1,0 +1,5 @@
+FROM lomorage/lomo-backup:build-stage0 as initial
+
+FROM ubuntu:22.04
+
+COPY --from=initial / /

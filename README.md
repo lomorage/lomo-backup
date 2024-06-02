@@ -14,7 +14,6 @@ Previously we want to implement a peer backup solution which allows me to back u
 3. run consistency check monthly and send me alert if cloud version is different from my local version
 4. support multi sites backup
 
-
 As I have local duplicate backup as well, and most time I access photos and videos from local service, so I seldom visit the cloud backup version.
 
 # Cost Analysis using current backup solution

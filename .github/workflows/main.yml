@@ -40,12 +40,10 @@ jobs:
       GOFLAGS: "-buildvcs=false"
       WORKDIR: /go/src/github.com/lomorage/lomo-backup
     steps:
-      - run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
-      - run: apt install -y tree rsync
       - run: cd test/data; find . | while read -r file; do git log -1 --format="%ad" --date=iso "$file" | xargs -t -I{} touch -d {} "$file"; done
       - run: mkdir -p $WORKDIR; rsync -avz * $WORKDIR/; cd $WORKDIR; tree --si -D test/data/
       - run: cd $WORKDIR; make install
