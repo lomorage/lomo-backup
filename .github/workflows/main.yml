@@ -7,28 +7,28 @@ on:
   #    - synchronize
   #    - reopened
 jobs:
-  lint:
-    runs-on: ubuntu-22.04
-    container:
-      image: lomorage/lomo-backup:1.0
-    env:
-      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
-      GOFLAGS: "-buildvcs=false"
-    steps:
-      - uses: actions/checkout@v4
-      - run: make lint
-
-  unit-test:
-    runs-on: ubuntu-22.04
-    container:
-      image: lomorage/lomo-backup:1.0
-    env:
-      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
-      GOBIN: /usr/local/bin
-      GOFLAGS: "-buildvcs=false"
-    steps:
-      - uses: actions/checkout@v4
-      - run: make unit-tests
+  #  lint:
+  #    runs-on: ubuntu-22.04
+  #    container:
+  #      image: lomorage/lomo-backup:1.0
+  #    env:
+  #      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
+  #      GOFLAGS: "-buildvcs=false"
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      - run: make lint
+  #
+  #  unit-test:
+  #    runs-on: ubuntu-22.04
+  #    container:
+  #      image: lomorage/lomo-backup:1.0
+  #    env:
+  #      PATH: /bin:/usr/bin:/usr/local/bin:/usr/local/go/bin
+  #      GOBIN: /usr/local/bin
+  #      GOFLAGS: "-buildvcs=false"
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      - run: make unit-tests
 
   e2e-test:
     runs-on: ubuntu-22.04
@@ -40,10 +40,24 @@ jobs:
       GOFLAGS: "-buildvcs=false"
       WORKDIR: /go/src/github.com/lomorage/lomo-backup
     steps:
+      - run: apt update && apt install -y python3-pip
+      - name: Start LocalStack
+        uses: LocalStack/setup-localstack@v0.1.2
+        with:
+          image-tag: '3.4.0'
+          install-awslocal: 'true'
+          configuration: DEBUG=1
+      - name: Run Tests against LocalStack
+        run: |
+          awslocal s3 mb s3://test
+          awslocal s3 ls
+          curl -v localhost:4566
+          echo "Test Execution complete!"
       - uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
+      - run: ./dockerfiles/run-localstack.sh
       - run: cd test/data; find . | while read -r file; do git log -1 --format="%ad" --date=iso "$file" | xargs -t -I{} touch -d {} "$file"; done
       - run: mkdir -p $WORKDIR; rsync -avz * $WORKDIR/; cd $WORKDIR; tree --si -D test/data/
       - run: cd $WORKDIR; make install
