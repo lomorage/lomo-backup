@@ -16,7 +16,7 @@ var listFilesNotInIsoOrCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f
 	" order by f.dir_id, f.id"
 
 const (
-	listFilesNotInIsoAndCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.hash, f.mod_time from files as f" +
+	listFilesNotInIsoAndCloudStmt = "select d.scan_root_dir_id, d.path, f.name, f.id, f.size, f.hash_local, f.mod_time from files as f" +
 		" inner join dirs as d on f.dir_id=d.id where f.iso_id=0 order by f.dir_id, f.id"
 	getTotalFileSizeNotInIsoStmt     = "select sum(size) from files where iso_id=0"
 	getTotalFilesInIsoStmt           = "select sum(size), count(size) from files where iso_id=?"

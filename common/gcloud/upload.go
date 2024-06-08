@@ -144,12 +144,10 @@ func (c *DriveClient) UpdateFileMetadata(fileID string, metadata map[string]stri
 	file.AppProperties = metadata
 
 	// Call the update method with modified metadata
-	updatedFile, err := c.srv.Files.Update(fileID, file).Fields("id, name, appProperties").Do()
+	_, err = c.srv.Files.Update(fileID, file).Fields("id, name, appProperties").Do()
 	if err != nil {
 		return fmt.Errorf("failed to update file metadata: %v", err)
 	}
-
-	fmt.Printf("--- %+v\n", updatedFile)
 
 	return nil
 }

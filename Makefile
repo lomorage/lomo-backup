@@ -1,7 +1,6 @@
 .PHONY: vendor
 
 SHELL=/bin/bash # Use bash syntax
-GOPATH=/go
 USER_ID := $(shell id -u)
 USER_NAME := $(shell whoami)
 GROUP_ID := $(shell id -g)
