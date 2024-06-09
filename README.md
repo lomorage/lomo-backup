@@ -2,19 +2,21 @@
 
 [![GitHub Actions](https://github.com/lomorage/lomo-backup/actions/workflows/main.yml/badge.svg)](https://github.com/lomorage/lomo-backup/actions?query=workflow%3AGo)
 
+Lomo-backup is a backup solution designed to protect your valuable photos and videos using a two-stage approach. This strategy combines the benefits of free cloud storage with long-term archival in AWS Glacier.
 
 # Motivation
-Photos/videos are very import personal assets and we want to store in our home instead of clouds. We developped lomorage application to self host our own google photo alternative solutions, which has met our main goal.
+Photos and videos are very important personal assets, and we prefer to store them at home rather than in the cloud. We developed the Lomorage application to self-host our own Google Photos alternative, successfully achieving our primary goal.
 
-At the same time, backup is extremely important as we don't want to lost any photos by accident. Current lomorage application can daily backup to another disk, or NAS via rsync, but it is still hosted at home. We want diaster recovery ability. Thus saving in cloud is natual way. But saving in the cloud is not always safe. Frome time to time, we heard user stored files are lost, so a solution which can run consistent check monthly and send alert if difference is found would be really helpful.
+However, backups are crucial because we don't want to risk losing any photos accidentally. The current Lomorage application can perform daily backups to another disk or NAS via rsync, but these backups are still hosted at home. We need disaster recovery capabilities, making cloud storage a natural choice. Unfortunately, cloud storage is not always reliable; there are occasional reports of lost user data. Therefore, a solution that can run consistent checks monthly and send alerts if any discrepancies are found would be very beneficial.
 
-Previously we want to implement a peer backup solution which allows me to back up photos / videos to my parents' or sisters' or brothers' or friends' home, which will be our final goal, but one copy backup is not enough, and cloud storage's SLA should be higher than peer storage, thus the ideal solution should meet below requirements:
-1. price is as cheap as possible
-2. run backup if new files are found
-3. run consistency check monthly and send me alert if cloud version is different from my local version
-4. support multi sites backup
+Our initial plan was to implement a peer backup solution, allowing us to back up photos and videos to the homes of parents, siblings, or friends. While this remains our ultimate goal, a single backup copy is insufficient, and cloud storage typically offers a higher SLA than peer storage. Thus, the ideal solution should meet the following requirements:
 
-As I have local duplicate backup as well, and most time I access photos and videos from local service, so I seldom visit the cloud backup version.
+- Cost-effectiveness
+- Automatic backup when new files are detected
+- Monthly consistency checks with alerts if the cloud version differs from the local version
+- Support for multi-site backups
+
+Since I already have local duplicate backups and usually access photos and videos from the local service, I rarely need to access the cloud backup version.
 
 # Cost Analysis using current backup solution
 Let us calculate the cost using AWS Glacier. As of 2024/4/4
@@ -28,24 +30,28 @@ assuming I have 50,000 photos (2M each) + 5,000 videos (30M each)， total stora
 assuming I have 250 new photos (2M each) + 50 videos (30M each) per month, total new storage is 2G, total price will be 2 * 0.0036 = $0.0072, and all PUT API cost will be 300 * 0.03 = $9. (need recalculate: consistency check will be 300 * 0.0004 = $0.12).
 
 # 2 Stages Approach
-There are too many small files, thus API operation becomes main cost comparing with real storage cost. So how about I pack all images and videos into one big ISO, just like I burnt one CD rom to backup content at old days. 
+Due to the large number of image and video files, API operations become the primary cost compared to actual storage costs. To mitigate this, we propose packing all images and videos into a single large ISO file, similar to burning a CD-ROM for backup in the old days. By creating a 10GB ISO, the storage cost remains the same, but upload costs are minimized to $0.75 (calculated as 250/10 * 0.03). The consistency check cost is $0.01 (250/10 * 0.0004).
 
-But ISO approach has one limitation is to append into new files, you need have original ISO file, so we need either keep one copy locally, or download when backup is needed. Either one requires extra cost. 
+However, the ISO approach has a limitation: to append new files, you need the original ISO file. This means either keeping a local copy or downloading it when a backup is needed, both of which incur additional costs.
 
-Since many cloud provider offers free storage tier option, we can use them as middle man or staging station before getting ready to make ISO and back up to Glacier. So called 2 stages approach can meet this need. - use free storage to store metadata and short term backup- use GDA to store permanent files.
+At the same time, many cloud providers offer free storage tiers. For example, Google Drive offers 15GB of free space, AWS offers 15GB, and Microsoft OneDrive offers 5GB.
 
-For example, Google drive offers 15G free space, AWS offers 15G free storage, MS one drive offers 5G free space. If we use 10G to make one ISO, new cost for storage will be same, but all upload costs will be 250/10 * 0.03 = $0.75. Consistency check price will be 250/10 * 0.0004 = $0.01
+To best utilize these servers, we created a "2-stage approach" solution:
 
-Now we'll do one upload every 5 months. Only 1 API operation is needed, and cost can be ignore.
+- Using free storage for metadata and short-term backups as an intermediary or staging area before creating the ISO and backing it up to Glacier.
+- Using Glacier deep archive for permanent file storage.
+
+We plan to upload once every five months, requiring only one API operation, which is negligible in cost.
 
 One note is I like to keep all photos/videos in remote backup when they are packed in ISO even I delete the ones at local because
 1. Photos/videos will not be packed into ISO until total size of unpacked ones reach configured iso size, thus user have time to delete the ones they don't want
 2. Number of deleted ones should not be that big, thus cost should be very small if storing in Glacier
 
 Workflow:
-1. Daily back up to free storage firstly.
-2. When reaching configured disk threshold, archive the files and make into ISO file, save into Glacier, delete backup ones from free storage
-3. One metadata file or sqlite db file specifies which files are in which ISO file, or free storage
+
+1. Perform daily backups to free storage initially.
+2. When reaching the configured disk threshold, archive the files into an ISO file, save it to Glacier, and delete the backup files from free storage.
+3. Maintain a metadata file or SQLite database specifying which files are in which ISO file or free storage.
 
 Pre-requsition commands:
 - mkisofs: generate iso file
@@ -83,7 +89,7 @@ Also welcome to try our free Photo backup applications. https://lomorage.com.
 - Original file hash and encrypted file hash are kept in cloud for future consistency check
 
 # Security Model
-The security model is from repository [filecrypt](https://github.com/kisom/filecrypt). Refer book [Practical Cryptography With Go](https://leanpub.com/gocrypto/read) for more detail.
+The security model is from repository [filecrypt](https://github.com/kisom/filecrypt). For more details, refer to the book [Practical Cryptography With Go](https://leanpub.com/gocrypto/read).
 
 This program assumes that an attacker does not currently have access
 to either the machine the archive is generated on, or on the machine
@@ -113,10 +119,10 @@ deter attackers without the large resources required to brute force
 this. Dictionary attacks will also be expensive for these same reasons.
 
 ### Key & Salt & Nonce
-`Lomo-backup` encrypts all data and metadata (original filename) while uploading the file to cloud and decrypts it upon retrieval on the fly. Each file upload has its own, unique encryption key derived from the master key. Master key is masked input from command line or derived from environment variable `LOMOB_MASTER_KEY`. The KDF (Key Derived Function) is agron2 which is the winner of the Password Hashing Competition. Salt for KDF is the same for encryption, and is generated randomly, and unique for each file.
+`Lomo-backup` encrypts all data and metadata, in which listing the original filename, during upload and decrypts them on-the-fly upon retrieval. Each file upload has a unique encryption key derived from a master key. The master key is either input via the command line or derived from the environment variable `LOMOB_MASTER_KEY`. The key derivation function (KDF) used is Argon2, the winner of the Password Hashing Competition. Each file's salt for the KDF is the first 16 byte of its SHA256 checksum.
 
 ### Notes
-- Filename is not encrypted
+- ISO and iso metadata filename is not encrypted
 
 # Pre-requisition
 ## AWS Glacier API Access ID and Access Secret
@@ -194,10 +200,69 @@ Exchange success, saving token into gdrive-token.json
 
 Once you get token, you can verify if it works or not via `./lomob list gdrive`
 
-# Tutorial
+# Basic Backup Steps
 The basic workflow is simple: 1. scan, 2. pack ISO, 3. upload ISO or files. Anytime you can list remote directories in cloud in tree view, and download and restore them.
-## 1. Scan
 
+1. **Install the software:** 
+    ```sh
+    go install github.com/lomorage/lomo-backup/cmd/lomob@latest
+    ```
+2. **Create a directory to store generated database file and iso files:** 
+    ```sh
+    mkdir lomo-backup
+    cd lomo-backup
+    ```
+3. **Scan the directory containing images and videos:** 
+    ```sh
+    lomob scan ~/Pictures
+    ```
+4. **Create ISO files:** 
+    ```sh
+    lomob iso create
+    ```
+    - Default ISO file size is 5GB. Use `-s` to change this value.
+    - Refer to the detailed usage section for larger sizes.
+5. **Set AWS credentials:** Set them in the environment variables as per the previous section.
+6. **Upload ISO files to AWS:** 
+    ```sh
+    lomob upload iso
+    ```
+    - Default upload part size is 100MB. Use `-p` to change this.
+    - Files are encrypted by default. Use `--no-encrypt` to upload raw files.
+    - Default storage class is S3 `STANDARD`. Use `--storage-class` to change to `DEEP_ARCHIVE`.
+    - Refer to the detailed usage section for other settings.
+7. **Get Google Cloud OAuth credentials:** Obtain the JSON file and token file.
+8. **Upload unpacked files to Google Cloud:** 
+    ```sh
+    lomob upload files
+    ```
+
+# More Detail Usage
+## Overall options and sub commands
+```
+$ ./lomob --help
+NAME:
+   lomob - Backup files to remote storage with 2 stage approach
+
+USAGE:
+   lomob [global options] command [command options] [arguments...]
+
+COMMANDS:
+   scan     Scan all files under given directory
+   iso      ISO related commands
+   upload   Upload packed ISO files or individual files
+   restore  Restore encrypted files cloud
+   list     List scanned files related commands
+   util     Various tools
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --db value                   Filename of DB (default: "lomob.db")
+   --log-level value, -l value  Log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel (default: 4)
+   --help, -h                   show help
+```
+
+## Scan Folder
 Specify one starting folder to scan. Files under the directories will be added into a sqlite db. For example, `lomob scan /home/scan/workspace/golang/src/lomorage/lomo-backup`. `--ignore-files` and `--ignore-dirs` will skip the specified files and directories.
 ```
 $ lomob scan -h
@@ -213,7 +278,7 @@ OPTIONS:
    --threads value, -t value         Number of scan threads in parallel (default: 20)
 ```
 
-## 2. Pack ISO
+## Create ISO
 `lomob iso create` will automatically pack all files into ISOs. If total size of files are beyond iso size, it will recreate a new ISO file and continue packing process. Default ISO size is 5G, but you can specify your own.
 ```
 $ lomob iso create -h
@@ -228,7 +293,7 @@ OPTIONS:
    --store-dir value, -p value  Directory to store the ISOs. It's urrent directory by default
 ```
 
-## 3. Upload
+## Upload
 
 Note that the name of first folder under given bucket is the scan root directory whose name made by this formular:
 - split the full path into different parts
@@ -236,15 +301,48 @@ Note that the name of first folder under given bucket is the scan root directory
 - for example, if scan root directory full path is `/home/scan/workspace/golang/src/lomorage/lomo-backup`, the folder name will be `home_scan_workspace_golang_src_lomorage_lomo-backup`
 
 ### 3.1 Upload ISOs to AWS
-You can either specify which iso to upload
+You can either specify the actual ISO files to upload, or if no filenames are provided, it will upload all the created ISO files.
+```
+$ lomob upload iso -h
+NAME:
+   lomob upload iso - Upload specified or all iso files
+
+USAGE:
+   lomob upload iso [command options] [arguments...]
+
+OPTIONS:
+   --awsAccessKeyID value         aws Access Key ID [$AWS_ACCESS_KEY_ID]
+   --awsSecretAccessKey value     aws Secret Access Key [$AWS_SECRET_ACCESS_KEY]
+   --awsBucketRegion value        aws Bucket Region [$AWS_DEFAULT_REGION]
+   --awsBucketName value          awsBucketName (default: "lomorage")
+   --part-size value, -p value    Size of each upload partition. KB=1000 Byte (default: "6M")
+   --nthreads value, -n value     Number of parallel multi part upload (default: 3)
+   --save-parts, -s               Save multiparts locally for debug
+   --no-encrypt                   not do any encryption, and upload raw files
+   --force                        force to upload from scratch and not reuse previous upload info
+   --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
+   --storage-class value          The  type  of storage to use for the object. Valid choices are: DEEP_ARCHIVE | GLACIER | GLACIER_IR | INTELLIGENT_TIERING | ONE-ZONE_IA | REDUCED_REDUNDANCY | STANDARD | STANDARD_IA. (default: "STANDARD")
+```
 
 
 ### 3.2 Upload files not packaged in ISOs to google drive
+```
+$ lomob upload files -h
+NAME:
+   lomob upload files - Upload individual files not in ISO to google drive
 
+USAGE:
+   lomob upload files [command options] [arguments...]
+
+OPTIONS:
+   --cred value                   Google cloud oauth credential json file (default: "gdrive-credentials.json")
+   --token value                  Token file to access google cloud (default: "gdrive-token.json")
+   --folder value                 Folders to list (default: "lomorage")
+   --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
+```
 
 ## 4. List
 ### 4.1 List scanned directory
-
 ```
 $ ./lomob list dirs -h
 NAME:
@@ -325,35 +423,67 @@ lomorage
 You can also restore any files
 ### 5. Restore
 ### 5.1 Restore files in google drive
-### 5.2 Restore isos in AWS S3
-
-# Other Util Commands
-## Overall options and sub commands
-
 ```
-$ ./lomob --help
+$ lomob restore gdrive -h
 NAME:
-   lomob - Backup files to remote storage with 2 stage approach
+   lomob restore gdrive - Restore files in google drive
 
 USAGE:
-   lomob [global options] command [command options] [arguments...]
+   lomob restore gdrive [command options] [encrypted file name in fullpath] [output file name]
 
-AUTHOR:
-    <support@lomorage.com>
-
-COMMANDS:
-   scan     Scan all files under given directory
-   iso      ISO related commands
-   upload   Upload packed ISO files or individual files
-   restore  Restore encrypted files cloud
-   list     List scanned files related commands
-   util     Various tools
-   help, h  Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --db value                   Filename of DB (default: "lomob.db")
-   --log-level value, -l value  Log level for processing. 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: TraceLevel (default: 4)
-   --help, -h                   show help
+OPTIONS:
+   --cred value                   Google cloud oauth credential json file (default: "gdrive-credentials.json")
+   --token value                  Token file to access google cloud (default: "gdrive-token.json")
+   --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
 ```
+### 5.2 Restore isos in AWS S3
+```
+$ lomob restore aws -h
+NAME:
+   lomob restore aws - Restore ISO files in AWS drive
+
+USAGE:
+   lomob restore aws [command options] [iso file name] [output file name]
+
+OPTIONS:
+   --awsAccessKeyID value         aws Access Key ID [$AWS_ACCESS_KEY_ID]
+   --awsSecretAccessKey value     aws Secret Access Key [$AWS_SECRET_ACCESS_KEY]
+   --awsBucketRegion value        aws Bucket Region [$AWS_DEFAULT_REGION]
+   --awsBucketName value          awsBucketName (default: "lomorage")
+   --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
+```
+
+## Utility tools
+### Acquire Google oauth credentail json file
+```
+$ lomob util gcloud-auth -h
+NAME:
+   lomob util gcloud-auth - 
+
+USAGE:
+   lomob util gcloud-auth [command options] [arguments...]
+
+OPTIONS:
+   --cred value           Google cloud oauth credential json file (default: "gdrive-credentials.json")
+   --token value          Token file to access google cloud (default: "gdrive-token.json")
+   --redirect-path value  Redirect path defined in credentials.json (default: "/")
+   --redirect-port value  Redirect port defined in credentials.json (default: 80)
+   
+```
+
+### Refresh Google Oauth Token
+```
+$ lomob util gcloud-auth-refresh -h
+NAME:
+   lomob util gcloud-auth-refresh - 
+
+USAGE:
+   lomob util gcloud-auth-refresh [command options] [arguments...]
+
+OPTIONS:
+   --cred value   Google cloud oauth credential json file (default: "gdrive-credentials.json")
+   --token value  Token file to access google cloud (default: "gdrive-token.json")
+```
+
 ## License
 This software is released under GPL-3.0.
