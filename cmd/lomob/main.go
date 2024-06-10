@@ -125,7 +125,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "part-size,p",
 							Usage: "Size of each upload partition. KB=1000 Byte",
-							Value: "6M",
+							Value: "100M",
 						},
 						cli.IntFlag{
 							Name:  "nthreads,n",
@@ -190,7 +190,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "part-size,p",
 							Usage: "Size of each upload partition. KB=1000 Byte",
-							Value: "6M",
+							Value: "100M",
 						},
 						cli.IntFlag{
 							Name:  "nthreads,n",
@@ -426,7 +426,7 @@ func main() {
 						cli.StringFlag{
 							Name:  "part-size,p",
 							Usage: "Size of each upload partition. KB=1000 Byte",
-							Value: "6M",
+							Value: "100M",
 						},
 						cli.IntFlag{
 							Name:  "part-number,pn",
