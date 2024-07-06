@@ -18,16 +18,18 @@ Our initial plan was to implement a peer backup solution, allowing us to back up
 
 Since I already have local duplicate backups and usually access photos and videos from the local service, I rarely need to access the cloud backup version.
 
-# Cost Analysis using current backup solution
+# Cost Analysis using prior-art backup solution
 Let us calculate the cost using AWS Glacier. As of 2024/4/4
 
 - $0.0036 per GB / Month
 - $0.03 (PUT, COPY, POST, LIST requests (per 1,000 requests))
 - $0.0004 (GET, SELECT, and all other requests (per 1,000 requests)) (need recalculate)
 
-assuming I have 50,000 photos (2M each) + 5,000 videos (30M each)， total storage is 250G, and total price will be 250 * 0.0036 = $0.9 / month, and total upload costs will be 55000 * 0.03 = $16.5. (need recalculate: consistency check will mainly use GET and LIST API, price will be 55000 * 0.0004 = $22 / month)
+Assuming I have 50,000 photos (2MB each) and 5,000 videos (30MB each), the total storage is 250GB. The monthly storage cost will be 250 * $0.0036 = $0.9. Total upload costs will be 55,000 * 0.03 / 1,000 = $1.65.
 
-assuming I have 250 new photos (2M each) + 50 videos (30M each) per month, total new storage is 2G, total price will be 2 * 0.0036 = $0.0072, and all PUT API cost will be 300 * 0.03 = $9. (need recalculate: consistency check will be 300 * 0.0004 = $0.12).
+For consistency checks, using mainly GET and LIST APIs, the cost will be 55,000 * 0.0004 / 1,000 = $0.022.
+
+Assuming 250 new photos (2MB each) and 50 videos (30MB each) per month, the new storage is 2GB. The additional storage cost will be 2 * $0.0036 = $0.0072. The PUT API cost will be 300 * 0.03 / 1,000 = $0.009. For consistency checks, the cost will be 300 * 0.0004 / 1,000 = $0.00012.
 
 # 2 Stages Approach
 Due to the large number of image and video files, API operations become the primary cost compared to actual storage costs. To mitigate this, we propose packing all images and videos into a single large ISO file, similar to burning a CD-ROM for backup in the old days. By creating a 10GB ISO, the storage cost remains the same, but upload costs are minimized to $0.75 (calculated as 250/10 * 0.03). The consistency check cost is $0.01 (250/10 * 0.0004).
@@ -300,7 +302,7 @@ Note that the name of first folder under given bucket is the scan root directory
 - rejoin all parts with `_`
 - for example, if scan root directory full path is `/home/scan/workspace/golang/src/lomorage/lomo-backup`, the folder name will be `home_scan_workspace_golang_src_lomorage_lomo-backup`
 
-### 3.1 Upload ISOs to AWS
+### Upload ISOs to AWS
 You can either specify the actual ISO files to upload, or if no filenames are provided, it will upload all the created ISO files.
 ```
 $ lomob upload iso -h
@@ -325,7 +327,7 @@ OPTIONS:
 ```
 
 
-### 3.2 Upload files not packaged in ISOs to google drive
+### Upload files not packaged in ISOs to google drive
 ```
 $ lomob upload files -h
 NAME:
@@ -341,15 +343,15 @@ OPTIONS:
    --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
 ```
 
-## 4. List
-### 4.1 List scanned directory
+## List
+### List scanned directory
 ```
 $ ./lomob list dirs -h
 NAME:
    lomob list dirs - List all scanned directories
 ```
 
-### 4.2 List big files scanned currently
+### List big files scanned currently
 ```
 $ ./lomob list bigfiles -h
 NAME:
@@ -362,7 +364,7 @@ OPTIONS:
    --file-size value, -s value  Minimum file size in the list result. KB=1000 Byte (default: "50MB")
 ```
 
-### 4.3 List created ISOs
+### List created ISOs
 This command list all created isos, and also display their current status, uploaded or not, upload success or failed, etc
 ```
 $ lomob list iso -h
@@ -376,7 +378,7 @@ ID    Name                          Size       Status                   Region  
 2     2024-04-11--2024-04-20.iso    14.0 MB    Created, not uploaded                        290            2024-04-20 20:53:32    b5474aeaacd7cd5fea0f41ba4ed18b298224031ff5ff008b9ff5a25fdcaea2b2
 ```
 
-### 4.3 List files in one ISOs
+### List files in one ISOs
 You can list all files in one ISO in tree view
 ```
 $ lomob iso dump 2024-04-13--2024-04-28.iso
@@ -393,7 +395,7 @@ $ lomob iso dump 2024-04-13--2024-04-28.iso
 ├── [           7450    04/23/2024]  README.md
 └── [            506    04/13/2024]  gitignore
 ```
-### 4.4 List files not in any isos
+### List files not in any isos
 This command is to list which files not packed into ISOs, and also show if it is uploaded in cloud or not
 ```
 $ lomob list files
@@ -404,7 +406,7 @@ Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/vendor/golang.o
 Y           /home/scan/workspace/golang/src/lomorage/lomo-backup/vendor/golang.org/x/sys/windows/types_windows_arm64.go```
 ```
 
-### 4.5 List files in google drive
+### List files in google drive
 You can run below command to list directories in tree view in google drive. It has 4 fields in front of each file name: 
 - file size in Byte
 - file mod time get through os.Stat.ModTime
@@ -421,8 +423,8 @@ lomorage
 ```
 
 You can also restore any files
-### 5. Restore
-### 5.1 Restore files in google drive
+## Restore
+### Restore files in google drive
 ```
 $ lomob restore gdrive -h
 NAME:
@@ -436,7 +438,7 @@ OPTIONS:
    --token value                  Token file to access google cloud (default: "gdrive-token.json")
    --encrypt-key value, -k value  Master key to encrypt current upload file [$LOMOB_MASTER_KEY]
 ```
-### 5.2 Restore isos in AWS S3
+### Restore isos in AWS S3
 ```
 $ lomob restore aws -h
 NAME:
