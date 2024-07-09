@@ -1,0 +1,23 @@
+/
+└── [	04/17/2024]  _go_src_github.com_lomorage_lomo-backup_test_data_static
+    ├── [	03/03/2023]  img
+    │   ├── [	05/03/2021]  buy
+    │   │   ├── [	      304081	05/03/2021]  search-en.png
+    │   │   ├── [	      476712	04/26/2021]  search.png
+    │   │   ├── [	      351826	05/03/2021]  settings-en.png
+    │   │   ├── [	      382947	04/26/2021]  settings.png
+    │   │   ├── [	     1595170	05/03/2021]  web-gallery-en.png
+    │   │   ├── [	     1207368	04/26/2021]  web-gallery.png
+    │   │   ├── [	      669073	05/03/2021]  web-upload-en.png
+    │   │   └── [	     1044760	04/26/2021]  web-upload.png
+    │   └── [	07/31/2021]  links
+    │       ├── [	       72809	07/06/2021]  appinn.png
+    │       ├── [	       47005	07/06/2021]  canalapps.png
+    │       ├── [	       32607	07/06/2021]  futurezone.png
+    │       ├── [	      189043	07/06/2021]  iplaysoft.png
+    │       ├── [	       23906	07/06/2021]  medium.png
+    │       └── [	        8714	07/31/2021]  x1g.png
+    └── [	06/15/2021]  video
+        ├── [	    13940681	06/15/2021]  Lomorage-tutorial.mp4
+        └── [	    21164705	06/15/2021]  Lomorage-tutorial.zh.mp4
+
