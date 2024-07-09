@@ -36,42 +36,18 @@ fi
 
 echo "Test dump iso files"
 
-isoFile="2019-04-03--2024-04-17.iso"
-
-lomob iso dump $isoFile > /tmp/tmp
-
-diff /tmp/tmp files_2019-04-03--2024-04-17.txt
-
-
-if [ $? -eq 0 ]; then
-  echo "Dump iso $isoFile are same as expected"
-else
-  echo "Dump iso $isoFile are different"
-  exit 1
-fi
-
-isoFile="2021-04-26--2021-04-26.iso"
-
-lomob iso dump $isoFile > /tmp/tmp
-
-diff /tmp/tmp files_2021-04-26--2021-04-26.txt
-
-if [ $? -eq 0 ]; then
-  echo "Dump iso $isoFile are same as expected"
-else
-  echo "Dump iso $isoFile are different"
-  exit 1
-fi
-
-isoFile="2021-04-26--2021-07-31.iso"
-
-lomob iso dump $isoFile > /tmp/tmp
-
-diff /tmp/tmp files_2021-04-26--2021-07-31.txt
-
-if [ $? -eq 0 ]; then
-  echo "Dump iso $isoFile are same as expected"
-else
-  echo "Dump iso $isoFile are different"
-  exit 1
-fi
+for name in "2019-04-03--2024-04-17" "2021-04-26--2021-04-26" "2021-04-26--2021-07-31";
+do
+  isoFile=${name}".iso"
+  
+  lomob iso dump $isoFile > /tmp/tmp
+  
+  diff /tmp/tmp files_${name}.txt
+  
+  if [ $? -eq 0 ]; then
+    echo "Dump iso $isoFile are same as expected"
+  else
+    echo "Dump iso $isoFile are different"
+    exit 1
+  fi
+done

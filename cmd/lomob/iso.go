@@ -179,7 +179,7 @@ func createIso(maxSize uint64, isoFilename string, scanRootDirs map[int]string, 
 			continue
 		}
 		srcFile := filepath.Join(scanRootDir, f.Name)
-		dstFile := filepath.Join(stagingDir, f.Name)
+		dstFile := filepath.Join(filepath.Join(stagingDir, flattenScanRootDir(scanRootDir)), f.Name)
 
 		// create dir
 		dstDir := filepath.Dir(dstFile)

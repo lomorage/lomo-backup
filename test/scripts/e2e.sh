@@ -22,3 +22,6 @@ rm -f lomob.db; sqlite3 ./lomob.db < ../../common/dbx/schema/1.sql
 
 # test upload encrypt file
 #./test-upload-aws-encrypt.sh
+
+# test scan 2 different root dirs
+./test-2-root-dirs.sh

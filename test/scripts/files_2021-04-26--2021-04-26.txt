@@ -1,8 +1,9 @@
 /
-└── [	04/17/2024]  static
-    └── [	03/03/2023]  img
-        └── [	05/03/2021]  buy
-            ├── [	     2494420	04/26/2021]  local.png
-            ├── [	    14578386	04/26/2021]  lomorage-mini.png
-            └── [	    14885871	04/26/2021]  lomorage-setup.png
+└── [	04/17/2024]  _go_src_github.com_lomorage_lomo-backup_test_data
+    └── [	04/17/2024]  static
+        └── [	03/03/2023]  img
+            └── [	05/03/2021]  buy
+                ├── [	     2494420	04/26/2021]  local.png
+                ├── [	    14578386	04/26/2021]  lomorage-mini.png
+                └── [	    14885871	04/26/2021]  lomorage-setup.png
 
